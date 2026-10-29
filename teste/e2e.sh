@@ -209,6 +209,8 @@ entrega "{\"id\":\"mcinterrompida\",\"nick\":\"Interrompido\",\"comandos\":[\"$I
 entrega "{\"id\":\"mc1\",\"nick\":\"Steve\",\"comandos\":[\"$OK\"]}"
 entrega "{\"id\":\"mcbloqueada\",\"nick\":\"Steve\",\"comandos\":[\"$BLOQ\",\"op Steve\"]}"
 entrega "{\"id\":\"mcdesligar\",\"nick\":\"Steve\",\"comandos\":[\"$BLOQ\",\"end\"]}"
+entrega "{\"id\":\"mcrecarregar\",\"nick\":\"Steve\",\"comandos\":[\"$BLOQ\",\"velocity reload\"]}"
+entrega "{\"id\":\"mcsufixo\",\"nick\":\"Cool Guy#1234\",\"edicaoJogador\":\"bedrock\",\"comandos\":[\"$BEDROCK_CMD\"]}"
 entrega "{\"id\":\"mcuuid\",\"nick\":\"Notch\",\"comandos\":[\"$UUID_CMD\"]}"
 entrega '{"id":"mcteste","evento":"teste","comandos":[]}'
 entrega '{"id":"mcfalha","nick":"Steve","comandos":["comandoquenaoexiste Steve"]}'
@@ -219,6 +221,8 @@ espera mcinterrompida "falhou interrompida" 40
 espera mc1 "entregue" 40
 espera mcbloqueada "falhou bloqueado" 5
 espera mcdesligar "falhou bloqueado" 5
+espera mcrecarregar "falhou bloqueado" 5
+espera mcsufixo "falhou bloqueado" 5
 if [ -n "$PROXY" ]; then
   espera mcuuid "entregue" 15
   entrega "{\"id\":\"mcsemconta\",\"nick\":\"Ninguem_zz_9871\",\"comandos\":[\"$UUID_CMD\"]}"

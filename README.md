@@ -56,8 +56,8 @@ A chave só lê e confirma as entregas **deste** servidor. Vazou? Troque no pain
 ## Bedrock (Geyser + Floodgate)
 
 - Instale o Geyser e o Floodgate como o Geyser manda. O plugin acha o Floodgate sozinho e avisa no console: `Floodgate encontrado (prefixo ".")`. O `nevermiss status` mostra a linha **Bedrock**.
-- O comprador digita o gamertag do Xbox (`Cool Guy` ou `Cool Guy#1234`). O plugin troca pelo nome que o Floodgate dá no servidor: o prefixo mais o gamertag sem o `#1234`, com espaço virando `_`, cortado em 16 (`.Cool_Guy`). É esse nome que entra no `{nick}`. Deixe o `replace-spaces` do Floodgate ligado (o padrão).
-- O `{uuid}` do jogador Bedrock é o do Floodgate (em servidor original).
+- O comprador digita o gamertag do Xbox como aparece no Minecraft (`Cool Guy`), sem o `#1234` do gamertag novo: com ele não dá para saber o nome no servidor, e sem ele `Cool Guy#1234` e `Cool Guy` seriam o mesmo jogador. O plugin troca pelo nome que o Floodgate dá no servidor: o prefixo mais o gamertag, com espaço virando `_`, cortado em 16 (`.Cool_Guy`). É esse nome que entra no `{nick}`. Deixe o `replace-spaces` do Floodgate ligado (o padrão).
+- O `{uuid}` do jogador Bedrock é o do Floodgate (em servidor original), garantido só com o jogador online: use **Só com o jogador online**. Offline, ele vem da GeyserMC, que só conhece quem já entrou num servidor com Geyser, e gamertag com espaço nem é buscado (a entrega falha com `erro`).
 - Sem o Floodgate, a entrega para Bedrock falha (`sem_bedrock`) e o console avisa `este servidor não aceita Bedrock: instale Geyser + Floodgate`.
 - Floodgate só no proxy: o plugin do servidor não enxerga, então entregue para Bedrock pelo plugin do proxy (ou ponha o Floodgate também nos servidores).
 
@@ -97,7 +97,7 @@ Em servidor pirata, o comprador é identificado pelo nick. Um nick digitado erra
 
 ## Segurança
 
-- **Comandos proibidos**, recusados aqui e na NeverMiss (o painel não desliga): `op`, `deop`, `stop`, `restart`, `reload`, `rl`, `ban`, `ban-ip`, `banip`, `ipban`, `tempban`, `tempbanip`, `tempipban`, `pardon`, `pardon-ip`, `pardonip`, `unban`, `unbanip`, `whitelist`, `execute`, `sudo`, `plugman` e os de desligar e recarregar o proxy (`end`, `shutdown`, `greload`), também com prefixo (`minecraft:op`) e com o `e` do EssentialsX (`esudo`, `eban`), e a palavra `*` ou `algo.*` sozinha, com ou sem aspas. A entrega com um deles falha inteira (`bloqueado`) e nada roda. É uma lista de bloqueio, não uma garantia: um comando que dá cargo de staff (`lp user {nick} parent set admin`) passa. Quem decide os comandos é você, no painel, com 2FA.
+- **Comandos proibidos**, recusados aqui e na NeverMiss (o painel não desliga): `op`, `deop`, `stop`, `restart`, `reload`, `rl`, `ban`, `ban-ip`, `banip`, `ipban`, `tempban`, `tempbanip`, `tempipban`, `pardon`, `pardon-ip`, `pardonip`, `unban`, `unbanip`, `whitelist`, `execute`, `sudo`, `plugman` e os de desligar e recarregar o proxy (`end`, `shutdown`, `greload` e o `velocity`, que tem o `velocity reload` e o `velocity dump`), também com prefixo (`minecraft:op`) e com o `e` do EssentialsX (`esudo`, `eban`), e a palavra `*` ou `algo.*` sozinha, com ou sem aspas. A entrega com um deles falha inteira (`bloqueado`) e nada roda. É uma lista de bloqueio, não uma garantia: um comando que dá cargo de staff (`lp user {nick} parent set admin`) passa. Quem decide os comandos é você, no painel, com 2FA.
 - **Do comprador só vem o nick**, num formato fechado (3 a 16 letras, números ou `_`; no Bedrock, o gamertag: letras, números e espaço) conferido no checkout, na NeverMiss e de novo aqui antes de rodar. No Bedrock o plugin confere a lista proibida depois de montar o nome.
 - **O plugin nunca baixa nem roda código.** Da NeverMiss chegam só os textos dos comandos que você salvou no painel (com 2FA).
 - **O console nunca sai do servidor.** O plugin manda só se cada comando deu certo (sim/não) e um motivo de uma lista fechada.

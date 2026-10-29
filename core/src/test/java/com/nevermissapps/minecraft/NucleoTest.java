@@ -207,6 +207,16 @@ public class NucleoTest {
     }
 
     @Test
+    public void mojangForaDoArEErroNaoNickQueNaoExiste() throws IOException {
+        jogo.onlineMode = true;
+        jogo.fora = true;
+        api.adicionar("mc29", "Steve", false, "lp user {uuid} parent add vip");
+        nucleo().ciclo();
+        assertTrue(jogo.rodou.isEmpty());
+        assertEquals("erro", api.entrega("mc29").motivo);
+    }
+
+    @Test
     public void testeDoPainelNaoRodaNada() throws IOException {
         api.adicionar("mc11", null, false).evento = "teste";
         api.adicionar("mc12", null, false, "op x").evento = "teste";
@@ -293,16 +303,15 @@ public class NucleoTest {
 
     @Test
     public void gamertag() {
-        for (String g : Arrays.asList("Steve", "a", "Cool Guy", "Cool Guy 2", "x1234567890abcde", "Gamer#1234", "Gamer 2#7")) {
+        for (String g : Arrays.asList("Steve", "a", "Cool Guy", "Cool Guy 2", "x1234567890abcde", "Gamer1234")) {
             assertTrue(g, Bedrock.GAMERTAG.matcher(g).matches());
         }
         for (String g : Arrays.asList("", " a", "a ", "a  b", "1abc", "_abc", "a_b", "x1234567890abcdef", "a#", "a#12345",
-                "a#x", "op;x", "a\nb", "Cool Guy#1234 ")) {
+                "a#x", "op;x", "a\nb", "Cool Guy#1234 ", "Gamer#1234", "Gamer 2#7")) {
             assertFalse(g, Bedrock.GAMERTAG.matcher(g).matches());
         }
         Bedrock b = new Bedrock(".");
         assertEquals(".Cool_Guy", b.nome("Cool Guy"));
-        assertEquals(".Gamer", b.nome("Gamer#1234"));
         assertEquals(".x1234567890abcd", b.nome("x1234567890abcde"));
         assertEquals("BE_Cool_Guy", new Bedrock("BE_").nome("Cool Guy"));
         assertEquals("Steve", new Bedrock("").nome("Steve"));
@@ -361,19 +370,25 @@ public class NucleoTest {
     public void uuidBedrockPeloFloodgate() throws IOException {
         UUID xuid = new UUID(0, 2535428650436000L);
         BedrockFalso b = new BedrockFalso(".");
+        b.uuids.put("CoolGuy", xuid);
         b.uuids.put("Cool Guy", xuid);
         jogo.bedrock = b;
         jogo.onlineMode = true;
-        api.adicionar("mc26", "Cool Guy#1234", false, "lp user {uuid} parent add vip").edicaoJogador = "bedrock";
+        api.adicionar("mc26", "CoolGuy", false, "lp user {uuid} parent add vip").edicaoJogador = "bedrock";
         api.adicionar("mc27", "Ninguem", false, "lp user {uuid} parent add vip").edicaoJogador = "bedrock";
+        // Com espaço e offline o Floodgate buscaria outro nome: não busca, e é erro (não "não existe").
+        api.adicionar("mc28", "Cool Guy", false, "lp user {uuid} parent add vip").edicaoJogador = "bedrock";
         nucleo().ciclo();
         assertEquals(Collections.singletonList("lp user " + xuid + " parent add vip"), jogo.rodou);
         assertEquals("nick_nao_existe", api.entrega("mc27").motivo);
+        assertEquals("erro", api.entrega("mc28").motivo);
     }
 
     @Test
     public void proxyNaoTemComandoDeDesligar() {
-        for (String c : Arrays.asList("end", "shutdown", "velocity:shutdown", "greload")) assertTrue(c, Nucleo.bloqueado(c));
+        for (String c : Arrays.asList("end", "shutdown", "velocity:shutdown", "greload", "velocity reload", "velocity dump")) {
+            assertTrue(c, Nucleo.bloqueado(c));
+        }
         assertFalse(Nucleo.bloqueado("alert Steve comprou VIP"));
     }
 
@@ -456,7 +471,7 @@ public class NucleoTest {
 
         @Override
         UUID uuid(String gamertag) {
-            return uuids.get(semSufixo(gamertag));
+            return uuids.get(gamertag);
         }
     }
 
@@ -471,6 +486,8 @@ public class NucleoTest {
         final Map<String, UUID> uuids = new HashMap<>();
         final List<String> log = new ArrayList<>();
         boolean onlineMode;
+        // A Mojang fora do ar (o uuid do proxy)
+        boolean fora;
         Runnable antesDaPrincipal = () -> { };
 
         public boolean rodar(String comando) {
@@ -484,6 +501,7 @@ public class NucleoTest {
         }
 
         public UUID uuid(String nick) {
+            if (fora) throw new java.io.UncheckedIOException(new IOException("a Mojang respondeu 429"));
             UUID u = uuids.get(nick);
             return u != null ? u : UUID.nameUUIDFromBytes(("OfflinePlayer:" + nick).getBytes(StandardCharsets.UTF_8));
         }

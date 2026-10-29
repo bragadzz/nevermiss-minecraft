@@ -3,3 +3,4 @@ build/
 teste/servidores/
 .idea/
 *.iml
+build-release/

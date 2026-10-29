@@ -12,8 +12,9 @@ import java.util.regex.Pattern;
  * A API do Floodgate é a mesma no Bukkit, no Velocity e no BungeeCord, e vai por reflexão (o jar não depende dela).
  */
 class Bedrock {
-    // 1 a 16 letras, números e espaço, começa com letra, sem espaço duplo nem nas pontas. O gamertag novo vem com "#1234".
-    static final Pattern GAMERTAG = Pattern.compile("^(?=[^#]{1,16}(?:#|$))[A-Za-z][A-Za-z0-9]*(?: [A-Za-z0-9]+)*(?:#[0-9]{1,4})?$");
+    // O gamertag como aparece no Minecraft: 1 a 16 letras, números e espaço, começa com letra, sem espaço duplo nem nas pontas.
+    // Sem o "#1234" do gamertag novo: sem ele, "Cool Guy#1234" e "Cool Guy" dariam o mesmo nome (a entrega cairia em outra conta).
+    static final Pattern GAMERTAG = Pattern.compile("^(?=.{1,16}$)[A-Za-z][A-Za-z0-9]*(?: [A-Za-z0-9]+)*$");
 
     final String prefixo;
     private final Object api;
@@ -48,21 +49,16 @@ class Bedrock {
         }
     }
 
-    static String semSufixo(String gamertag) {
-        int h = gamertag.indexOf('#');
-        return h < 0 ? gamertag : gamertag.substring(0, h);
-    }
-
     /** O nome do jogador no servidor. O gamertag já passou pelo {@link #GAMERTAG}. */
     String nome(String gamertag) {
-        String n = (prefixo + semSufixo(gamertag)).replace(' ', '_');
+        String n = (prefixo + gamertag).replace(' ', '_');
         return n.length() > 16 ? n.substring(0, 16) : n;
     }
 
-    /** O UUID que o Floodgate dá ao jogador (vem do xuid). Pode consultar a GeyserMC: nunca na thread principal. */
+    /** O UUID que o Floodgate dá ao jogador offline (vem do xuid). Consulta a GeyserMC: nunca na thread principal. */
     UUID uuid(String gamertag) throws Exception {
         if (uuidPara == null) return null;
-        Future<?> f = (Future<?>) uuidPara.invoke(api, semSufixo(gamertag));
+        Future<?> f = (Future<?>) uuidPara.invoke(api, gamertag);
         return (UUID) f.get(10, TimeUnit.SECONDS);
     }
 }

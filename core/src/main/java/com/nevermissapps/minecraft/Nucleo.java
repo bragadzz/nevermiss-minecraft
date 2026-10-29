@@ -39,11 +39,11 @@ final class Nucleo {
     private static final Pattern CONTROLE = Pattern.compile("\\p{Cc}");
     // A mesma lista da API. Nem o painel nem a API desligam esta checagem.
     // O EssentialsX aceita cada um com "e" na frente (esudo, eban).
-    // end, shutdown e greload são o stop e o reload dos proxies (BungeeCord e Velocity).
+    // end, shutdown, greload e velocity (velocity reload, velocity dump) são o desligar e o recarregar dos proxies.
     private static final Set<String> PROIBIDOS = new HashSet<>(Arrays.asList(
             "op", "deop", "stop", "restart", "reload", "rl", "ban", "ban-ip", "banip", "ipban", "tempban",
             "tempbanip", "tempipban", "pardon", "pardon-ip", "pardonip", "unban", "unbanip", "whitelist",
-            "execute", "sudo", "plugman", "end", "shutdown", "greload"));
+            "execute", "sudo", "plugman", "end", "shutdown", "greload", "velocity"));
     private static final Pattern ASPAS = Pattern.compile("^[\"']+|[\"']+$");
     private static final int MAX_COMANDOS = 100;
     // Quantos nicks esperando o jogador entrar a API manda (e o plugin devolve os que estão online).
@@ -164,7 +164,9 @@ final class Nucleo {
                 try {
                     e.uuid = uuidDe(e);
                 } catch (Exception x) {
-                    jogo.aviso("Não achei o UUID de " + e.nick + ": " + x);
+                    // Mojang ou GeyserMC fora do ar (ou o gamertag com espaço offline): é erro, não "nick não existe".
+                    e.uuidFalhou = true;
+                    jogo.aviso("Não achei o UUID de " + e.nick + ": " + (x.getCause() != null ? x.getCause() : x));
                 }
             }
         }
@@ -225,6 +227,7 @@ final class Nucleo {
         if (e.precisaUuid()) {
             if (!jogo.onlineMode()) return Resultado.falhou(e.id, "uuid_pirata", null);
             // O UUID do Floodgate vem do xuid (não é versão 4).
+            if (e.uuid == null && e.uuidFalhou) return Resultado.falhou(e.id, "erro", null);
             if (e.uuid == null || (!e.bedrock && e.uuid.version() != 4)) return Resultado.falhou(e.id, "nick_nao_existe", null);
             for (int i = 0; i < prontos.size(); i++) prontos.set(i, prontos.get(i).replace("{uuid}", e.uuid.toString()));
         }
@@ -425,7 +428,10 @@ final class Nucleo {
         if (!e.bedrock) return NICK.matcher(e.nick).matches() ? jogo.uuid(e.nick) : null;
         String nome = nomeBedrock(e.nick);
         if (nome == null) return null;
-        return jogo.online(nome) ? jogo.uuid(nome) : jogo.bedrock().uuid(e.nick);
+        if (jogo.online(nome)) return jogo.uuid(nome);
+        // O Floodgate cola o gamertag no endereço da GeyserMC sem codificar: com espaço a busca seria de outro nome.
+        if (e.nick.indexOf(' ') >= 0) throw new IOException("com espaço, o {uuid} do Bedrock só sai com o jogador online");
+        return jogo.bedrock().uuid(e.nick);
     }
 
     /** O UUID da conta original, pela Mojang. Para os proxies, que não guardam quem já entrou. null = não existe. */
@@ -491,6 +497,8 @@ final class Nucleo {
         // edicaoJogador "bedrock": o nick é o gamertag do Xbox
         boolean bedrock;
         UUID uuid;
+        // A busca do UUID deu erro (não é o mesmo que "não existe").
+        boolean uuidFalhou;
 
         Entrega(String id) {
             this.id = id;
