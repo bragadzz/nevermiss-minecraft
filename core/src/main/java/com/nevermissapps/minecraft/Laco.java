@@ -33,7 +33,8 @@ final class Laco {
         nucleo = new Nucleo(jogo, registro, versao);
         config = new File(pasta, "config.yml");
         if (!config.exists()) {
-            try (InputStream in = Laco.class.getResourceAsStream("/config.yml")) {
+            // Ao lado da classe, não na raiz: o loader do Velocity e do BungeeCord procura primeiro no proxy.
+            try (InputStream in = Laco.class.getResourceAsStream("config.yml")) {
                 Files.copy(in, config.toPath());
             }
         }
