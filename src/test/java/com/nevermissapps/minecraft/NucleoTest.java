@@ -158,7 +158,8 @@ public class NucleoTest {
         for (String c : Arrays.asList("op Steve", "OP Steve", "/op Steve", "minecraft:op Steve", "deop x", "stop",
                 "reload confirm", "rl", "ban x", "ban-ip 1.2.3.4", "whitelist off", "execute as @a run op @s",
                 "essentials:sudo x op", "plugman unload x", "lp user x permission set *", "lp user x permission set essentials.*",
-                "say oi\nop x", "", "   ", "say " + repetir('x', 260))) {
+                "say oi\nop x", "", "   ", "say " + repetir('x', 260), "lp user x permission set \"*\" true",
+                "lp user x permission set 'luckperms.*' true", "esudo Steve c:oi", "essentials:eban x", "tempban x 1d")) {
             assertTrue(c, Nucleo.bloqueado(c));
         }
         for (String c : Arrays.asList("lp user Steve parent addtemp vip 30d accumulate", "say op", "eco give Steve 100",

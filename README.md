@@ -62,8 +62,8 @@ Em servidor pirata, o comprador é identificado pelo nick. Um nick digitado erra
 
 ## Segurança
 
-- **Comandos proibidos**, recusados aqui e na NeverMiss (o painel não desliga): `op`, `deop`, `stop`, `restart`, `reload`, `rl`, `ban`, `ban-ip`, `banip`, `pardon`, `pardon-ip`, `unban`, `whitelist`, `execute`, `sudo`, `plugman`, também com prefixo (`minecraft:op`), e qualquer permissão curinga (`*` ou `algo.*`). A entrega com um deles falha inteira (`bloqueado`) e nada roda.
-- **Do comprador só vem o nick**, num formato fechado e conferido de novo aqui. Fora do formato, a entrega é recusada.
+- **Comandos proibidos**, recusados aqui e na NeverMiss (o painel não desliga): `op`, `deop`, `stop`, `restart`, `reload`, `rl`, `ban`, `ban-ip`, `banip`, `ipban`, `tempban`, `tempbanip`, `tempipban`, `pardon`, `pardon-ip`, `pardonip`, `unban`, `unbanip`, `whitelist`, `execute`, `sudo`, `plugman`, também com prefixo (`minecraft:op`) e com o `e` do EssentialsX (`esudo`, `eban`), e a palavra `*` ou `algo.*` sozinha, com ou sem aspas. A entrega com um deles falha inteira (`bloqueado`) e nada roda. É uma lista de bloqueio, não uma garantia: um comando que dá cargo de staff (`lp user {nick} parent set admin`) passa. Quem decide os comandos é você, no painel, com 2FA.
+- **Do comprador só vem o nick**, num formato fechado (3 a 16 letras, números ou `_`) conferido no checkout, na NeverMiss e de novo aqui antes de rodar. O plugin confere o nick que a entrega traz, não o texto já montado do comando: a proteção do texto é a NeverMiss só montar comandos salvos no painel.
 - **O plugin nunca baixa nem roda código.** Da NeverMiss chegam só os textos dos comandos que você salvou no painel (com 2FA).
 - **O console nunca sai do servidor.** O plugin manda só se cada comando deu certo (sim/não) e um motivo de uma lista fechada.
 - **Só HTTPS.** `http://` só é aceito em `localhost` e `127.0.0.1`, para teste. Redirecionamentos são recusados, para a chave não ir parar em outro endereço.

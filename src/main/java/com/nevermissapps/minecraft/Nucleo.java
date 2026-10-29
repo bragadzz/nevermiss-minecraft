@@ -36,10 +36,15 @@ final class Nucleo {
     private static final Pattern ID = Pattern.compile("^[A-Za-z0-9_-]{1,64}$");
     private static final Pattern CONTROLE = Pattern.compile("\\p{Cc}");
     // A mesma lista da API. Nem o painel nem a API desligam esta checagem.
+    // O EssentialsX aceita cada um com "e" na frente (esudo, eban).
     private static final Set<String> PROIBIDOS = new HashSet<>(Arrays.asList(
-            "op", "deop", "stop", "restart", "reload", "rl", "ban", "ban-ip", "banip", "pardon",
-            "pardon-ip", "unban", "whitelist", "execute", "sudo", "plugman"));
+            "op", "deop", "stop", "restart", "reload", "rl", "ban", "ban-ip", "banip", "ipban", "tempban",
+            "tempbanip", "tempipban", "pardon", "pardon-ip", "pardonip", "unban", "unbanip", "whitelist",
+            "execute", "sudo", "plugman"));
+    private static final Pattern ASPAS = Pattern.compile("^[\"']+|[\"']+$");
     private static final int MAX_COMANDOS = 100;
+    // Quantos nicks esperando o jogador entrar a API manda (e o plugin devolve os que estão online).
+    private static final int MAX_ESPERANDO = 1000;
     private static final int MAX_LOTE = 50;
 
     private final Jogo jogo;
@@ -93,10 +98,12 @@ final class Nucleo {
     static boolean bloqueado(String comando) {
         if (comando == null || comando.trim().isEmpty() || comando.length() > 256) return true;
         if (CONTROLE.matcher(comando).find()) return true;
-        String[] palavras = semBarra(comando).split("\\s+");
-        String primeira = palavras[0].toLowerCase(Locale.ROOT);
-        primeira = primeira.substring(primeira.indexOf(':') + 1);
+        // As aspas saem antes de comparar: o LuckPerms aceita "*" entre aspas.
+        String[] palavras = semBarra(comando).toLowerCase(Locale.ROOT).split("\\s+");
+        for (int i = 0; i < palavras.length; i++) palavras[i] = ASPAS.matcher(palavras[i]).replaceAll("");
+        String primeira = palavras[0].substring(palavras[0].indexOf(':') + 1);
         if (PROIBIDOS.contains(primeira)) return true;
+        if (primeira.startsWith("e") && PROIBIDOS.contains(primeira.substring(1))) return true;
         for (String p : palavras) if (p.equals("*") || p.endsWith(".*")) return true;
         return false;
     }
@@ -118,7 +125,7 @@ final class Nucleo {
         confirmar();
         ultimaConsulta = System.currentTimeMillis();
         List<String> enviados = new ArrayList<>();
-        for (String n : esperando) if (enviados.size() < 100 && jogo.online(n)) enviados.add(n);
+        for (String n : esperando) if (enviados.size() < MAX_ESPERANDO && jogo.online(n)) enviados.add(n);
 
         Resposta r;
         try {
@@ -397,7 +404,7 @@ final class Nucleo {
         List<String> l = new ArrayList<>();
         if (el != null && el.isJsonArray()) {
             for (JsonElement x : el.getAsJsonArray()) {
-                if (l.size() < 100 && x.isJsonPrimitive()) l.add(x.getAsString());
+                if (l.size() < MAX_ESPERANDO && x.isJsonPrimitive()) l.add(x.getAsString());
             }
         }
         return Collections.unmodifiableList(l);

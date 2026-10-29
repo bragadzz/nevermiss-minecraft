@@ -31,3 +31,9 @@ jar {
     archiveFileName = "NeverMiss-${project.version}.jar"
 }
 
+
+// Jar reproduzível: o mesmo código e o mesmo JDK dão o mesmo SHA-256 (quem compila confere com o publicado)
+tasks.withType(AbstractArchiveTask).configureEach {
+    preserveFileTimestamps = false
+    reproducibleFileOrder = true
+}
