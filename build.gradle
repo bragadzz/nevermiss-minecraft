@@ -1,0 +1,33 @@
+plugins {
+    id 'java'
+}
+
+group = 'com.nevermissapps'
+version = '1.0.0'
+
+repositories {
+    mavenCentral()
+    maven { url = 'https://repo.papermc.io/repository/maven-public/' }
+}
+
+dependencies {
+    // A API do 1.8.8 garante que o jar só usa o que existe do 1.8 ao mais novo.
+    // O Gson vem junto (2.2.4), o mesmo que o servidor 1.8 traz.
+    compileOnly 'org.spigotmc:spigot-api:1.8.8-R0.1-SNAPSHOT'
+    testImplementation 'com.google.code.gson:gson:2.2.4'
+    testImplementation 'junit:junit:4.13.2'
+}
+
+tasks.withType(JavaCompile).configureEach {
+    options.release = 8
+    options.encoding = 'UTF-8'
+}
+
+processResources {
+    filesMatching('plugin.yml') { expand(version: project.version) }
+}
+
+jar {
+    archiveFileName = "NeverMiss-${project.version}.jar"
+}
+

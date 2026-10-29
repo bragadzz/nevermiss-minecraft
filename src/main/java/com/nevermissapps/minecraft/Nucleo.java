@@ -1,0 +1,435 @@
+package com.nevermissapps.minecraft;
+
+import com.google.gson.JsonArray;
+import com.google.gson.JsonElement;
+import com.google.gson.JsonObject;
+import com.google.gson.JsonParser;
+import com.google.gson.JsonPrimitive;
+
+import java.io.ByteArrayOutputStream;
+import java.io.IOException;
+import java.io.InputStream;
+import java.io.OutputStream;
+import java.net.HttpURLConnection;
+import java.net.URL;
+import java.nio.charset.StandardCharsets;
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.Collections;
+import java.util.HashSet;
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Locale;
+import java.util.Map;
+import java.util.Set;
+import java.util.UUID;
+import java.util.regex.Pattern;
+
+/**
+ * O laço de entrega: pergunta à API se há entregas, roda os comandos no console e confirma.
+ * Não conhece o Bukkit (ver {@link Jogo}), para dar para testar sem servidor.
+ */
+final class Nucleo {
+    static final String API_PADRAO = "https://api-website.nevermissapps.com";
+    static final Pattern CHAVE = Pattern.compile("^nmmc_[A-Za-z0-9_-]{43}$");
+    static final Pattern NICK = Pattern.compile("^[A-Za-z0-9_]{3,16}$");
+    private static final Pattern ID = Pattern.compile("^[A-Za-z0-9_-]{1,64}$");
+    private static final Pattern CONTROLE = Pattern.compile("\\p{Cc}");
+    // A mesma lista da API. Nem o painel nem a API desligam esta checagem.
+    private static final Set<String> PROIBIDOS = new HashSet<>(Arrays.asList(
+            "op", "deop", "stop", "restart", "reload", "rl", "ban", "ban-ip", "banip", "pardon",
+            "pardon-ip", "unban", "whitelist", "execute", "sudo", "plugman"));
+    private static final int MAX_COMANDOS = 100;
+    private static final int MAX_LOTE = 50;
+
+    private final Jogo jogo;
+    private final Registro registro;
+    private final String versao;
+    private final Map<String, Resultado> aConfirmar = new LinkedHashMap<>();
+    private volatile String api;
+    private volatile String chave;
+    private volatile List<String> esperando = Collections.emptyList();
+    private int falhasSeguidas;
+
+    volatile String situacao = "Ainda não consultou a NeverMiss";
+    volatile long ultimoContato;
+    volatile long ultimaConsulta;
+    volatile boolean pausado;
+
+    Nucleo(Jogo jogo, Registro registro, String versao) {
+        this.jogo = jogo;
+        this.registro = registro;
+        this.versao = versao;
+        // O servidor caiu entre o "rodando" e o "feita": não roda de novo, avisa a falha.
+        for (String id : registro.interrompidas()) enfileirar(gravar(Resultado.falhou(id, "interrompida", null)));
+    }
+
+    /** Chave null para o laço (sem chave ou config errada). */
+    void configurar(String api, String chave) {
+        this.api = api;
+        this.chave = chave;
+    }
+
+    boolean configurado() {
+        return chave != null;
+    }
+
+    /** Só https. http só em localhost, para teste. Devolve null se não serve. */
+    static String validarApi(String texto) {
+        if (texto == null) return null;
+        String limpo = texto.trim();
+        while (limpo.endsWith("/")) limpo = limpo.substring(0, limpo.length() - 1);
+        try {
+            URL url = new URL(limpo);
+            String host = url.getHost();
+            if (url.getProtocol().equals("https") && !host.isEmpty()) return limpo;
+            if (url.getProtocol().equals("http") && (host.equals("localhost") || host.equals("127.0.0.1"))) return limpo;
+        } catch (IOException e) {
+            return null;
+        }
+        return null;
+    }
+
+    static boolean bloqueado(String comando) {
+        if (comando == null || comando.trim().isEmpty() || comando.length() > 256) return true;
+        if (CONTROLE.matcher(comando).find()) return true;
+        String[] palavras = semBarra(comando).split("\\s+");
+        String primeira = palavras[0].toLowerCase(Locale.ROOT);
+        primeira = primeira.substring(primeira.indexOf(':') + 1);
+        if (PROIBIDOS.contains(primeira)) return true;
+        for (String p : palavras) if (p.equals("*") || p.endsWith(".*")) return true;
+        return false;
+    }
+
+    private static String semBarra(String comando) {
+        String c = comando.trim();
+        return c.startsWith("/") ? c.substring(1) : c;
+    }
+
+    /** Um jogador entrou: se há entrega esperando por ele, o plugin adianta a consulta. */
+    boolean aoEntrar(String nick) {
+        for (String n : esperando) if (n.equalsIgnoreCase(nick)) return true;
+        return false;
+    }
+
+    /** Uma volta do laço, fora da thread principal. Devolve em quantos segundos fazer a próxima (-1 = parar). */
+    int ciclo() {
+        if (chave == null) return -1;
+        confirmar();
+        ultimaConsulta = System.currentTimeMillis();
+        List<String> enviados = new ArrayList<>();
+        for (String n : esperando) if (enviados.size() < 100 && jogo.online(n)) enviados.add(n);
+
+        Resposta r;
+        try {
+            r = post("/v1/minecraft/fila", corpoFila(enviados));
+        } catch (IOException e) {
+            return foraDoAr("Sem resposta da NeverMiss (" + e.getClass().getSimpleName() + ")");
+        }
+        if (r.status != 200) return erro(r);
+
+        falhasSeguidas = 0;
+        ultimoContato = System.currentTimeMillis();
+        boolean pausaAgora = booleano(r.json.get("pausado"));
+        if (pausaAgora && !pausado) jogo.aviso("Entregas pausadas pela NeverMiss.");
+        pausado = pausaAgora;
+        esperando = textos(r.json.get("esperando"));
+        situacao = pausado ? "Entregas pausadas pela NeverMiss" : "Conectado";
+
+        final List<Entrega> entregas = lerEntregas(r.json.get("entregas"));
+        for (Entrega e : entregas) {
+            if (e.precisaUuid() && e.nick != null && jogo.onlineMode() && registro.feita(e.id) == null) {
+                try {
+                    e.uuid = jogo.uuid(e.nick);
+                } catch (RuntimeException x) {
+                    jogo.aviso("Não achei o UUID de " + e.nick + ": " + x);
+                }
+            }
+        }
+        if (!entregas.isEmpty()) {
+            List<Resultado> feitos;
+            try {
+                feitos = jogo.naPrincipal(() -> {
+                    List<Resultado> l = new ArrayList<>();
+                    for (Entrega e : entregas) l.add(executar(e));
+                    return l;
+                });
+            } catch (Exception x) {
+                // Servidor desligando: o que não rodou volta na próxima consulta.
+                return 30;
+            }
+            for (Resultado f : feitos) enfileirar(f);
+            confirmar();
+        }
+
+        for (String n : esperando) if (!enviados.contains(n) && jogo.online(n)) return 5;
+        return Math.max(10, Math.min(300, inteiro(r.json.get("proximaEm"), 30)));
+    }
+
+    /** Thread principal. */
+    Resultado executar(Entrega e) {
+        Resultado guardado = registro.feita(e.id);
+        if (guardado != null) return guardado;
+        if (registro.interrompida(e.id)) return gravar(Resultado.falhou(e.id, "interrompida", null));
+        if (e.teste || e.comandos.isEmpty()) {
+            if (e.teste) jogo.log("Teste do painel recebido");
+            return Resultado.entregue(e.id, new boolean[0]);
+        }
+        if (e.nick != null && !NICK.matcher(e.nick).matches()) {
+            jogo.aviso("Entrega " + e.id + " recusada: nick inválido");
+            return Resultado.falhou(e.id, "bloqueado", null);
+        }
+        if (e.comandos.size() > MAX_COMANDOS) return Resultado.falhou(e.id, "bloqueado", null);
+        for (String c : e.comandos) {
+            if (bloqueado(c)) {
+                jogo.aviso("Entrega " + e.id + " recusada: comando proibido: " + (c == null ? "?" : c));
+                return Resultado.falhou(e.id, "bloqueado", null);
+            }
+        }
+        if (e.soOnline && e.nick != null && !jogo.online(e.nick)) return Resultado.adiada(e.id);
+
+        List<String> prontos = new ArrayList<>();
+        for (String c : e.comandos) prontos.add(semBarra(c));
+        if (e.precisaUuid()) {
+            if (!jogo.onlineMode()) return Resultado.falhou(e.id, "uuid_pirata", null);
+            if (e.uuid == null || e.uuid.version() != 4) return Resultado.falhou(e.id, "nick_nao_existe", null);
+            for (int i = 0; i < prontos.size(); i++) prontos.set(i, prontos.get(i).replace("{uuid}", e.uuid.toString()));
+        }
+
+        try {
+            registro.marcarRodando(e.id);
+        } catch (IOException x) {
+            jogo.aviso("Não consegui gravar executadas.txt, nada rodou: " + x.getMessage());
+            return Resultado.falhou(e.id, "erro", null);
+        }
+        boolean[] ok = new boolean[prontos.size()];
+        boolean tudo = true;
+        for (int i = 0; i < ok.length; i++) {
+            try {
+                ok[i] = jogo.rodar(prontos.get(i));
+            } catch (RuntimeException x) {
+                jogo.aviso("Erro no comando: " + x);
+            }
+            jogo.log((ok[i] ? "Rodou: " : "Falhou: ") + prontos.get(i));
+            tudo &= ok[i];
+        }
+        return gravar(tudo ? Resultado.entregue(e.id, ok) : Resultado.falhou(e.id, "comando_falhou", ok));
+    }
+
+    /** Manda as confirmações guardadas. Se a API não responder, ficam para a próxima volta. */
+    void confirmar() {
+        while (true) {
+            List<Resultado> lote = new ArrayList<>();
+            synchronized (aConfirmar) {
+                for (Resultado x : aConfirmar.values()) {
+                    if (lote.size() == MAX_LOTE) break;
+                    lote.add(x);
+                }
+            }
+            if (lote.isEmpty() || chave == null) return;
+            JsonArray itens = new JsonArray();
+            for (Resultado x : lote) itens.add(x.json());
+            JsonObject corpo = new JsonObject();
+            corpo.add("resultados", itens);
+            Resposta r;
+            try {
+                r = post("/v1/minecraft/confirmar", corpo);
+            } catch (IOException e) {
+                return;
+            }
+            if (r.status == 400) jogo.aviso("A NeverMiss recusou uma confirmação: " + texto(r.json.get("error")));
+            else if (r.status != 200) return;
+            synchronized (aConfirmar) {
+                for (Resultado x : lote) aConfirmar.remove(x.id, x);
+            }
+        }
+    }
+
+    int aConfirmar() {
+        synchronized (aConfirmar) {
+            return aConfirmar.size();
+        }
+    }
+
+    List<String> status() {
+        long agora = System.currentTimeMillis();
+        String c = chave;
+        return Arrays.asList(
+                "NeverMiss " + versao + ": " + situacao,
+                "Chave: " + (c == null ? "nenhuma" : "****" + c.substring(c.length() - 4)) + " · API: " + api,
+                "Último contato: " + (ultimoContato == 0 ? "nunca" : "há " + (agora - ultimoContato) / 1000 + " s"),
+                "Esperando o jogador entrar: " + esperando.size() + " · A confirmar: " + aConfirmar());
+    }
+
+    private void enfileirar(Resultado r) {
+        synchronized (aConfirmar) {
+            aConfirmar.put(r.id, r);
+        }
+    }
+
+    private Resultado gravar(Resultado r) {
+        try {
+            registro.marcarFeita(r);
+        } catch (IOException x) {
+            jogo.aviso("Não consegui gravar executadas.txt: " + x.getMessage());
+        }
+        return r;
+    }
+
+    private int erro(Resposta r) {
+        switch (r.status) {
+            case 401:
+                return parar("Chave inválida ou revogada. Gere outra no painel.", 300);
+            case 403:
+                return parar("O adicional Minecraft não está ativo nesta loja.", 300);
+            case 426:
+                return parar("Atualize o plugin NeverMiss (mínima " + texto(r.json.get("minima")) + ").", 600);
+            case 429:
+                return Math.max(5, Math.min(300, inteiro(r.retryAfter, 5)));
+            default:
+                return foraDoAr("A NeverMiss respondeu " + r.status);
+        }
+    }
+
+    private int parar(String motivo, int segundos) {
+        situacao = motivo;
+        jogo.aviso(motivo);
+        return segundos;
+    }
+
+    private int foraDoAr(String motivo) {
+        situacao = motivo;
+        if (falhasSeguidas == 0) jogo.aviso(motivo + ". Tento de novo em 30 s.");
+        falhasSeguidas++;
+        return Math.min(300, 30 << Math.min(4, falhasSeguidas - 1));
+    }
+
+    private JsonObject corpoFila(List<String> online) {
+        JsonObject servidor = new JsonObject();
+        String v = jogo.versao();
+        servidor.addProperty("versao", v.length() > 80 ? v.substring(0, 80) : v);
+        servidor.addProperty("onlineMode", jogo.onlineMode());
+        JsonArray nicks = new JsonArray();
+        for (String n : online) nicks.add(new JsonPrimitive(n));
+        JsonObject c = new JsonObject();
+        c.addProperty("versao", versao);
+        c.add("servidor", servidor);
+        c.add("online", nicks);
+        return c;
+    }
+
+    private List<Entrega> lerEntregas(JsonElement el) {
+        List<Entrega> lista = new ArrayList<>();
+        if (el == null || !el.isJsonArray()) return lista;
+        for (JsonElement item : el.getAsJsonArray()) {
+            if (!item.isJsonObject()) continue;
+            JsonObject o = item.getAsJsonObject();
+            String id = texto(o.get("id"));
+            if (id == null || !ID.matcher(id).matches()) {
+                jogo.aviso("Entrega com id inválido ignorada");
+                continue;
+            }
+            Entrega e = new Entrega(id);
+            e.nick = texto(o.get("nick"));
+            e.soOnline = booleano(o.get("soOnline"));
+            e.teste = "teste".equals(texto(o.get("evento")));
+            JsonElement cs = o.get("comandos");
+            if (cs != null && cs.isJsonArray()) {
+                for (JsonElement c : cs.getAsJsonArray()) e.comandos.add(c.isJsonPrimitive() ? c.getAsString() : null);
+            }
+            lista.add(e);
+        }
+        return lista;
+    }
+
+    private Resposta post(String caminho, JsonObject corpo) throws IOException {
+        HttpURLConnection c = (HttpURLConnection) new URL(api + caminho).openConnection();
+        c.setInstanceFollowRedirects(false);
+        c.setConnectTimeout(10000);
+        c.setReadTimeout(20000);
+        c.setRequestMethod("POST");
+        c.setDoOutput(true);
+        c.setRequestProperty("Authorization", "Bearer " + chave);
+        c.setRequestProperty("User-Agent", "NeverMissMC/" + versao);
+        c.setRequestProperty("Content-Type", "application/json; charset=utf-8");
+        c.setRequestProperty("Accept", "application/json");
+        try (OutputStream out = c.getOutputStream()) {
+            out.write(corpo.toString().getBytes(StandardCharsets.UTF_8));
+        }
+        int status = c.getResponseCode();
+        InputStream in = status >= 400 ? c.getErrorStream() : c.getInputStream();
+        JsonObject json = new JsonObject();
+        if (in != null) {
+            try (InputStream fecha = in) {
+                ByteArrayOutputStream buf = new ByteArrayOutputStream();
+                byte[] b = new byte[8192];
+                for (int n; (n = fecha.read(b)) > 0; ) buf.write(b, 0, n);
+                JsonElement lido = new JsonParser().parse(new String(buf.toByteArray(), StandardCharsets.UTF_8));
+                if (lido.isJsonObject()) json = lido.getAsJsonObject();
+            } catch (RuntimeException naoEJson) {
+                // corpo que não é JSON: fica só o status
+            }
+        }
+        return new Resposta(status, json, c.getHeaderField("Retry-After"));
+    }
+
+    private static String texto(JsonElement el) {
+        return el == null || !el.isJsonPrimitive() ? null : el.getAsString();
+    }
+
+    private static boolean booleano(JsonElement el) {
+        return el != null && el.isJsonPrimitive() && el.getAsJsonPrimitive().isBoolean() && el.getAsBoolean();
+    }
+
+    private static int inteiro(JsonElement el, int padrao) {
+        return inteiro(texto(el), padrao);
+    }
+
+    private static int inteiro(String s, int padrao) {
+        try {
+            return s == null ? padrao : Integer.parseInt(s.trim());
+        } catch (NumberFormatException e) {
+            return padrao;
+        }
+    }
+
+    private static List<String> textos(JsonElement el) {
+        List<String> l = new ArrayList<>();
+        if (el != null && el.isJsonArray()) {
+            for (JsonElement x : el.getAsJsonArray()) {
+                if (l.size() < 100 && x.isJsonPrimitive()) l.add(x.getAsString());
+            }
+        }
+        return Collections.unmodifiableList(l);
+    }
+
+    static final class Entrega {
+        final String id;
+        final List<String> comandos = new ArrayList<>();
+        String nick;
+        boolean soOnline;
+        boolean teste;
+        UUID uuid;
+
+        Entrega(String id) {
+            this.id = id;
+        }
+
+        boolean precisaUuid() {
+            for (String c : comandos) if (c != null && c.contains("{uuid}")) return true;
+            return false;
+        }
+    }
+
+    private static final class Resposta {
+        final int status;
+        final JsonObject json;
+        final String retryAfter;
+
+        Resposta(int status, JsonObject json, String retryAfter) {
+            this.status = status;
+            this.json = json;
+            this.retryAfter = retryAfter;
+        }
+    }
+}
