@@ -1,0 +1,7 @@
+name: NeverMiss
+version: '${version}'
+main: com.nevermissapps.minecraft.NeverMissBungee
+author: NeverMiss
+description: Entrega no proxy o que foi vendido pela NeverMiss.
+# Só para o Floodgate ligar antes: sem ele o plugin funciona igual, só não entrega para Bedrock.
+softDepends: [floodgate]

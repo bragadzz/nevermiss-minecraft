@@ -1,0 +1,5 @@
+dependencies {
+    // A API do 1.8.8 garante que o jar só usa o que existe do 1.8 ao mais novo.
+    // O que muda no 1.7.10 (getOnlinePlayers) e o agendador do Folia vão por reflexão.
+    compileOnly 'org.spigotmc:spigot-api:1.8.8-R0.1-SNAPSHOT'
+}

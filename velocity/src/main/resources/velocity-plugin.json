@@ -1,0 +1,10 @@
+{
+  "id": "nevermiss",
+  "name": "NeverMiss",
+  "version": "${version}",
+  "description": "Entrega no proxy o que foi vendido pela NeverMiss.",
+  "url": "https://nevermissapps.com",
+  "authors": ["NeverMiss"],
+  "dependencies": [{ "id": "floodgate", "optional": true }],
+  "main": "com.nevermissapps.minecraft.NeverMissVelocity"
+}

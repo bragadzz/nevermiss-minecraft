@@ -1,39 +1,50 @@
 plugins {
-    id 'java'
+    id 'com.gradleup.shadow' version '8.3.5' apply false
 }
 
-group = 'com.nevermissapps'
-version = '1.0.0'
+subprojects {
+    apply plugin: 'java'
 
-repositories {
-    mavenCentral()
-    maven { url = 'https://repo.papermc.io/repository/maven-public/' }
+    group = 'com.nevermissapps'
+    version = '1.1.0'
+
+    repositories {
+        mavenCentral()
+        maven { url = 'https://repo.papermc.io/repository/maven-public/' }
+    }
+
+    tasks.withType(JavaCompile).configureEach {
+        options.release = 8
+        options.encoding = 'UTF-8'
+    }
+
+    // Jar reproduzível: o mesmo código e o mesmo JDK dão o mesmo SHA-256 (quem compila confere com o publicado)
+    tasks.withType(AbstractArchiveTask).configureEach {
+        preserveFileTimestamps = false
+        reproducibleFileOrder = true
+    }
 }
 
-dependencies {
-    // A API do 1.8.8 garante que o jar só usa o que existe do 1.8 ao mais novo.
-    // O Gson vem junto (2.2.4), o mesmo que o servidor 1.8 traz.
-    compileOnly 'org.spigotmc:spigot-api:1.8.8-R0.1-SNAPSHOT'
-    testImplementation 'com.google.code.gson:gson:2.2.4'
-    testImplementation 'junit:junit:4.13.2'
-}
+// Um jar por plataforma, com o core e o Gson dentro. O Gson vai relocado: o 1.7.10 não traz o com.google.gson,
+// e assim todas as plataformas rodam a mesma versão.
+configure(subprojects.findAll { it.name != 'core' }) {
+    apply plugin: 'com.gradleup.shadow'
 
-tasks.withType(JavaCompile).configureEach {
-    options.release = 8
-    options.encoding = 'UTF-8'
-}
+    dependencies {
+        implementation project(':core')
+    }
 
-processResources {
-    filesMatching('plugin.yml') { expand(version: project.version) }
-}
+    processResources {
+        filesMatching(['plugin.yml', 'bungee.yml', 'velocity-plugin.json']) { expand(version: project.version) }
+    }
 
-jar {
-    archiveFileName = "NeverMiss-${project.version}.jar"
-}
+    jar.enabled = false
 
+    shadowJar {
+        archiveFileName = "NeverMiss-${project.name.capitalize()}-${project.version}.jar"
+        relocate 'com.google.gson', 'com.nevermissapps.minecraft.gson'
+        exclude 'module-info.class', 'META-INF/versions/**', 'META-INF/maven/**'
+    }
 
-// Jar reproduzível: o mesmo código e o mesmo JDK dão o mesmo SHA-256 (quem compila confere com o publicado)
-tasks.withType(AbstractArchiveTask).configureEach {
-    preserveFileTimestamps = false
-    reproducibleFileOrder = true
+    assemble.dependsOn shadowJar
 }
