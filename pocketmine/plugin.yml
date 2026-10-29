@@ -1,0 +1,16 @@
+name: NeverMiss
+version: 1.1.0
+main: nevermissapps\minecraft\NeverMiss
+src-namespace-prefix: nevermissapps\minecraft
+api: 5.0.0
+description: Entrega no servidor o que foi vendido pela NeverMiss.
+website: https://nevermissapps.com
+commands:
+  nevermiss:
+    description: Status e configuração da NeverMiss.
+    usage: /nevermiss status | testar | recarregar
+    permission: nevermiss.admin
+permissions:
+  nevermiss.admin:
+    description: Usar /nevermiss.
+    default: op

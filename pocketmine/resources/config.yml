@@ -1,0 +1,7 @@
+# Chave deste servidor, gerada no painel da NeverMiss (Minecraft > Servidores).
+# Também pode vir da variável de ambiente NEVERMISS_CHAVE
+# ou do comando "nevermiss chave <chave>" no console.
+chave: ""
+
+# Endereço da API. Não mude, a não ser para teste.
+api: "https://api-website.nevermissapps.com"
