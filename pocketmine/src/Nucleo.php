@@ -20,7 +20,7 @@ final class Nucleo{
 	private const PROIBIDOS = [
 		"op", "deop", "stop", "restart", "reload", "rl", "ban", "ban-ip", "banip", "ipban", "tempban",
 		"tempbanip", "tempipban", "pardon", "pardon-ip", "pardonip", "unban", "unbanip", "whitelist",
-		"execute", "sudo", "plugman",
+		"execute", "sudo", "plugman", "end", "shutdown", "greload",
 	];
 	private const MAX_COMANDOS = 100;
 	// Quantos nicks esperando o jogador entrar a API manda (e o plugin devolve os que estão online).
@@ -148,18 +148,18 @@ final class Nucleo{
 	/**
 	 * O {nick} vira o nome do jogador, entre aspas quando tem espaço (o console do PocketMine entende aspas).
 	 * A API troca o espaço do gamertag por "_" (o nome que o Floodgate dá no Java); no PocketMine o nome tem o espaço,
-	 * então a palavra "Nome_Com_Espaco" volta a ser "Nome Com Espaco", entre aspas.
+	 * então a palavra "Nome_Com_Espaco" volta a ser "Nome Com Espaco", entre aspas. O lojista que já pôs aspas ("{nick}")
+	 * não ganha aspas dobradas.
 	 */
 	private static function comNome(string $comando, string $nome) : string{
-		$certo = str_contains($nome, " ") ? "\"$nome\"" : $nome;
-		$comando = str_replace("{nick}", $certo, $comando);
-		if($certo === $nome){
-			return $comando;
+		if(!str_contains($nome, " ")){
+			return str_replace("{nick}", $nome, $comando);
 		}
+		$certo = "\"$nome\"";
 		$daApi = str_replace(" ", "_", $nome);
-		$palavras = explode(" ", $comando);
+		$palavras = explode(" ", str_replace(["\"{nick}\"", "{nick}"], $certo, $comando));
 		foreach($palavras as $i => $p){
-			if($p === $daApi){
+			if($p === $daApi || $p === "\"$daApi\""){
 				$palavras[$i] = $certo;
 			}
 		}
@@ -294,7 +294,7 @@ final class Nucleo{
 
 		try{
 			$this->registro->marcarRodando($id);
-		}catch(\RuntimeException $x){
+		}catch(\Exception $x){
 			$this->jogo->aviso("Não consegui gravar executadas.txt, nada rodou: " . $x->getMessage());
 			return self::falhou($id, "erro");
 		}
@@ -425,19 +425,16 @@ final class Nucleo{
 
 	/**
 	 * O PHP do PocketMine nem sempre acha os certificados do sistema. Sem eles o https não conecta (e nunca roda sem conferir).
-	 * null = o curl já tem os dele.
+	 * null = o curl.cainfo do php.ini, que o curl já usa. Os outros vão explícitos: o curl do PHP do pmmp nem sempre lê o openssl.cafile.
 	 */
 	private static function certificados() : ?string{
 		$ini = ini_get("curl.cainfo");
 		if(is_string($ini) && $ini !== "" && is_file($ini)){
 			return null;
 		}
-		$padrao = openssl_get_cert_locations()["default_cert_file"] ?? "";
-		if(is_string($padrao) && $padrao !== "" && is_file($padrao)){
-			return null;
-		}
-		foreach(["/etc/ssl/certs/ca-certificates.crt", "/etc/pki/tls/certs/ca-bundle.crt", "/etc/ssl/cert.pem", "/etc/ssl/ca-bundle.pem"] as $f){
-			if(is_file($f)){
+		$openssl = openssl_get_cert_locations();
+		foreach([$openssl["ini_cafile"] ?? "", $openssl["default_cert_file"] ?? "", "/etc/ssl/certs/ca-certificates.crt", "/etc/pki/tls/certs/ca-bundle.crt", "/etc/ssl/cert.pem", "/etc/ssl/ca-bundle.pem"] as $f){
+			if(is_string($f) && $f !== "" && is_file($f)){
 				return $f;
 			}
 		}
@@ -456,7 +453,7 @@ final class Nucleo{
 	private function gravar(array $r) : array{
 		try{
 			$this->registro->marcarFeita($r);
-		}catch(\RuntimeException $x){
+		}catch(\Exception $x){
 			$this->jogo->aviso("Não consegui gravar executadas.txt: " . $x->getMessage());
 		}
 		return $r;

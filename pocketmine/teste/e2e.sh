@@ -110,6 +110,8 @@ echo "confirmação perdida: ok"
 
 # 6) Jogador offline: a entrega "só com o jogador online" espera (sem sair, sem contar tentativa) e o plugin sabe dele.
 espera mcespera "pendente null 0" 1
+# A chave pelo console: grava e reconecta, sem a chave aparecer no log (conferido no fim).
+console "nevermiss chave $CHAVE"
 console "nevermiss status"
 console "nevermiss testar"
 sleep 8
@@ -124,6 +126,7 @@ noLog 'nm-interrompida' && falha "a entrega interrompida rodou"
 noLog 'nm-espera' && falha "a entrega do jogador offline rodou"
 noLog 'Esperando o jogador entrar: 1' || falha "/nevermiss status não mostrou o jogador esperando"
 noLog '\[NeverMiss\] Conectado' || falha "/nevermiss testar não respondeu"
+[ "$(grep -c 'Chave \*\*\*\*eeee (config.yml)' "$DIR/saida.log")" = 2 ] || falha "nevermiss chave no console não gravou a chave"
 grep -rq "$CHAVE" "$DIR/saida.log" "$DIR/server.log" && falha "a chave apareceu no log"
 
 console "stop"

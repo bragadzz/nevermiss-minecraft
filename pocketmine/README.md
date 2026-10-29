@@ -59,7 +59,7 @@ gamertag novo é aceito e fica de fora do nome no servidor). É o nome que o Poc
 
 | Variável | Vira |
 |---|---|
-| `{nick}` | o gamertag (sem o `#1234`). Com espaço, vai **entre aspas** (`give "Some Name" diamond 1`), que é como o console do PocketMine lê um nome com espaço |
+| `{nick}` | o gamertag (sem o `#1234`). Com espaço, vai **entre aspas** (`give "Some Name" diamond 1`), que é como o console do PocketMine lê um nome com espaço (com `"{nick}"` no painel dá o mesmo) |
 | `{uuid}` | o UUID que o PocketMine dá ao jogador (`Player::getUniqueId()`, não o XUID). **Só com `xbox-auth=on`** (sem ele a entrega falha com `uuid_pirata`) e **só com o jogador no servidor**: ligue "Só com o jogador online" no produto |
 | `{quantidade}` | quantas unidades foram compradas |
 | `{pedido}` | o número do pedido |
@@ -71,7 +71,7 @@ Sem `xbox-auth`, qualquer um entra com qualquer nome: um gamertag digitado errad
 
 - **Comandos proibidos**, recusados aqui e na NeverMiss (o painel não desliga): `op`, `deop`, `stop`, `restart`, `reload`, `rl`,
   `ban`, `ban-ip`, `banip`, `ipban`, `tempban`, `tempbanip`, `tempipban`, `pardon`, `pardon-ip`, `pardonip`, `unban`, `unbanip`,
-  `whitelist`, `execute`, `sudo`, `plugman`, também com prefixo (`pocketmine:op`), com o `e` na frente (`eban`), entre aspas
+  `whitelist`, `execute`, `sudo`, `plugman`, `end`, `shutdown`, `greload`, também com prefixo (`pocketmine:op`), com o `e` na frente (`eban`), entre aspas
   (`"op"`, `"" op`), e a palavra `*` ou `algo.*` sozinha. A linha é lida do jeito que o console do PocketMine lê (com aspas). A
   entrega com um deles falha inteira (`bloqueado`) e nada roda. É uma lista de bloqueio, não uma garantia: um comando que dá cargo
   de staff passa. Quem decide os comandos é você, no painel, com 2FA.
@@ -94,7 +94,8 @@ Sem `xbox-auth`, qualquer um entra com qualquer nome: um gamertag digitado errad
 
 ## Montar e testar
 
-Precisa de Node 22 ou mais novo (o phar é montado sem PHP, sempre igual).
+Precisa de Node 22.2 ou mais novo (o phar é montado sem PHP, sempre igual; o `.gitattributes` mantém as linhas em LF, senão
+um clone no Windows daria outro SHA-256).
 
 ```sh
 node build.mjs           # build/NeverMiss-PocketMine-1.1.0.phar e o SHA-256

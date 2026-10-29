@@ -140,7 +140,7 @@ foreach([
 	"op Steve", "/op Steve", "OP Steve", "minecraft:op Steve", "pocketmine:op Steve", "deop Steve", "stop", "eban Steve",
 	"esudo Steve x", "whitelist off", "ban-ip 1.2.3.4", "\"op\" Steve", "'op' Steve", "\"\" op Steve", "/ op Steve",
 	"op\u{00A0}Steve", "lp user Steve permission set *", "setuperm Steve \"*\"", "lp user Steve permission set essentials.*",
-	"say a\nop Steve", "say \x07", "", "   ", "/", str_repeat("a", 257),
+	"say a\nop Steve", "say \x07", "", "   ", "/", str_repeat("a", 257), "end", "shutdown", "greload",
 ] as $c){
 	ok(Nucleo::bloqueado($c), "devia bloquear: " . json_encode($c));
 }
@@ -163,14 +163,14 @@ $n = plugin($jogo);
 entrega("mcnick1", "a b", ["say x"]);
 entrega("mcnick2", "Steve\n", ["say x"]);
 entrega("mcnick3", "1Steve", ["say x"], ["edicaoJogador" => "bedrock"]);
-entrega("mcgt", "Some Name#1234", ["give Some_Name diamond 1", "say {nick} comprou", "tell Some_Names oi"], ["edicaoJogador" => "bedrock"]);
+entrega("mcgt", "Some Name#1234", ["give Some_Name diamond 1", "say {nick} comprou", "tell Some_Names oi", "kit \"Some_Name\" vip", "tell \"{nick}\" oi"], ["edicaoJogador" => "bedrock"]);
 entrega("mcgt2", "Alex#77", ["give Alex diamond 1"], ["edicaoJogador" => "bedrock"]);
 volta($n);
 foreach(["mcnick1", "mcnick2", "mcnick3"] as $id){
 	$e = estado($id);
 	ok($e["estado"] === "falhou" && $e["motivo"] === "bloqueado", "$id: " . json_encode($e));
 }
-ok($jogo->rodados === ["give \"Some Name\" diamond 1", "say \"Some Name\" comprou", "tell Some_Names oi", "give Alex diamond 1"], "gamertag: " . json_encode($jogo->rodados));
+ok($jogo->rodados === ["give \"Some Name\" diamond 1", "say \"Some Name\" comprou", "tell Some_Names oi", "kit \"Some Name\" vip", "tell \"Some Name\" oi", "give Alex diamond 1"], "gamertag: " . json_encode($jogo->rodados));
 ok(estado("mcgt")["estado"] === "entregue" && estado("mcgt2")["estado"] === "entregue", "gamertag não ficou entregue");
 echo "nick e gamertag: ok\n";
 

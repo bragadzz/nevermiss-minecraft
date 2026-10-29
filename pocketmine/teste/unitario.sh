@@ -9,6 +9,7 @@ CHAVE="nmmc_$(printf 'e%.0s' $(seq 43))"
 
 nice node "$RAIZ/teste/api-falsa.mjs" 3971 "$CHAVE" > /dev/null &
 PID=$!
-trap 'kill $PID 2>/dev/null || true' EXIT
+# Espera a API falsa sair: o e2e.sh sobe outra na mesma porta logo depois.
+trap 'kill $PID 2>/dev/null || true; wait $PID 2>/dev/null || true' EXIT
 for _ in $(seq 50); do curl -fsS -X POST http://127.0.0.1:3971/teste/estado > /dev/null 2>&1 && break; sleep 0.1; done
 if [ -f "$INI" ]; then nice "$PHP" -c "$INI" "$RAIZ/teste/nucleo-teste.php"; else nice "$PHP" "$RAIZ/teste/nucleo-teste.php"; fi

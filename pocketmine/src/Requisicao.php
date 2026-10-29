@@ -26,8 +26,13 @@ final class Requisicao extends AsyncTask{
 	}
 
 	public function onRun() : void{
-		$cabecalhos = json_decode($this->cabecalhos, true, 4, JSON_THROW_ON_ERROR);
-		$this->setResult(Nucleo::http($this->url, $cabecalhos, $this->corpo));
+		// Erro aqui derruba o servidor inteiro (o PocketMine 5 trata a thread que caiu como crash): vira "sem resposta".
+		try{
+			$cabecalhos = json_decode($this->cabecalhos, true, 4, JSON_THROW_ON_ERROR);
+			$this->setResult(Nucleo::http($this->url, $cabecalhos, $this->corpo));
+		}catch(\Throwable $e){
+			$this->setResult([0, [], null, $e->getMessage()]);
+		}
 	}
 
 	public function onCompletion() : void{

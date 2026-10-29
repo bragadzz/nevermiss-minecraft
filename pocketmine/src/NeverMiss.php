@@ -27,7 +27,8 @@ final class NeverMiss extends PluginBase implements Listener, Jogo{
 		$this->saveDefaultConfig();
 		try{
 			$this->registro = new Registro($this->getDataFolder() . "executadas.txt");
-		}catch(\RuntimeException $e){
+		}catch(\Exception $e){
+			// No PocketMine o aviso do PHP (sem permissão, disco cheio) vira ErrorException, não RuntimeException.
 			$this->getLogger()->critical("Não consegui abrir executadas.txt (" . $e->getMessage() . "). Nada vai ser entregue.");
 			$this->getServer()->getPluginManager()->disablePlugin($this);
 			return;
