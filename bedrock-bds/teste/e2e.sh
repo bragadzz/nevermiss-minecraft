@@ -8,7 +8,7 @@
 set -euo pipefail
 
 RAIZ=$(cd "$(dirname "$0")/.." && pwd)
-VM=${NM_VM:-$HOME/frentes-lojas/mbd-vm}
+VM=$HOME/frentes-lojas/mbd-vm
 NOME=nmbds
 export LIMA_HOME="$VM/lima"
 LIMACTL="$VM/lima-bin/bin/limactl"
@@ -86,7 +86,8 @@ vm "rm -rf ~/bds && cp -a ~/bds-original ~/bds && cd ~/bds && sed -i \
   server.properties && grep -q '^server-port=19140' server.properties"
 
 # 4) A 1ª vez cria o mundo, sem o addon. Depois, o addon como o README manda: o pack no behavior_packs, o mundo com ele, o
-# server-net liberado e a chave no secrets.json (com o Bearer).
+# server-net liberado só para o addon (o permissions.json da pasta dele; o config/default fica como veio) e a chave no
+# secrets.json (com o Bearer).
 ligar 300
 desligar
 CONFIG=$(cat <<SH
@@ -95,7 +96,7 @@ cd ~/bds
 mkdir -p behavior_packs/NeverMiss "config/$MODULO"
 unzip -oq /mnt/addon/build/NeverMiss-BDS-$VERSAO.mcpack -d behavior_packs/NeverMiss
 echo '[{"pack_id": "$(node -p 'require(process.argv[1]).header.uuid' "$RAIZ/pacote/manifest.json")", "version": [${VERSAO//./, }]}]' > worlds/nevermiss/world_behavior_packs.json
-python3 -I -c 'import json,sys; p=sys.argv[1]; d=json.load(open(p)); m=d.setdefault("allowed_modules", []); "@minecraft/server-net" in m or m.append("@minecraft/server-net"); json.dump(d, open(p, "w"), indent=2)' config/default/permissions.json
+echo '{"allowed_modules": ["@minecraft/server", "@minecraft/server-net", "@minecraft/server-admin"]}' > "config/$MODULO/permissions.json"
 echo '{"chave": "Bearer $CHAVE"}' > "config/$MODULO/secrets.json"
 echo '{"api": "$API"}' > "config/$MODULO/variables.json"
 SH
@@ -103,21 +104,34 @@ SH
 vm "$CONFIG"
 
 # 5) Liga com o addon. Sem o experimento Beta APIs o server-net (só existe em beta) pode não carregar: o teste confere, liga o
-# experimento com o ligar-beta-apis.py (como o README manda) e liga de novo.
+# experimento com o ligar-beta-apis.py (como o README manda) e liga de novo. Se nem assim, o BDS não leu o permissions.json da
+# pasta do addon: o server-net vai para o config/default (o caminho B do README) e liga de novo.
+ligouAddon() { esperaLog "[NeverMiss] NeverMiss $VERSAO ligado (bds)." "$1"; }
+oQueODisse() {
+  echo "--- o addon não ligou ($1); o que o BDS disse: ---"
+  vm "grep -iE 'script|module|beta|experiment|permission|allowed|nevermiss|error' ~/bds/saida.log | tail -20" || true
+}
+BETA="não precisou ligar o Beta APIs"
+PERM="o permissions.json da pasta do addon bastou"
 ligar
-if esperaLog "[NeverMiss] NeverMiss $VERSAO ligado (bds)." 15; then
-  BETA="não precisou ligar o Beta APIs"
-else
-  echo "--- o addon não ligou sem o Beta APIs; o que o BDS disse: ---"
-  vm "grep -iE 'script|module|beta|experiment|nevermiss|error' ~/bds/saida.log | tail -20" || true
+if ! ligouAddon 15; then
+  oQueODisse "sem o Beta APIs"
   desligar
   vm "python3 -I /mnt/addon/ligar-beta-apis.py ~/bds/worlds/nevermiss/level.dat"
-  ligar
-  esperaLog "[NeverMiss] NeverMiss $VERSAO ligado (bds)." 30 || falha "o addon não ligou nem com o Beta APIs"
   BETA="precisou ligar o Beta APIs"
+  ligar
+  if ! ligouAddon 15; then
+    oQueODisse "com o Beta APIs e o permissions.json só na pasta do addon"
+    desligar
+    vm "cd ~/bds && python3 -I -c 'import json,sys; p=sys.argv[1]; d=json.load(open(p)); m=d.setdefault(\"allowed_modules\", []); \"@minecraft/server-net\" in m or m.append(\"@minecraft/server-net\"); json.dump(d, open(p, \"w\"), indent=2)' config/default/permissions.json"
+    BETA="o Beta APIs ficou ligado (não dá para saber se precisava)"
+    PERM="o BDS não leu o permissions.json da pasta do addon: precisou do config/default"
+    ligar
+    ligouAddon 30 || falha "o addon não ligou nem com o Beta APIs e o server-net no config/default"
+  fi
 fi
 noLog "[NeverMiss] Chave no secrets.json." || falha "o addon não achou a chave em config/$MODULO/secrets.json"
-echo "BDS no ar com o addon ($BETA)."
+echo "BDS no ar com o addon ($BETA; $PERM)."
 
 # 6) As entregas. O scoreboard prova que o comando rodou de verdade e quantas vezes (o nome sem ninguém online vira um
 # "jogador falso" do placar).
@@ -206,5 +220,5 @@ noLog "Teste do painel recebido" || falha "teste do painel não apareceu"
 noLog "o {uuid} não existe no BDS" || falha "o motivo do {uuid} não apareceu no console"
 vm "grep -rlF -- $CHAVE ~/bds --exclude-dir=config" && falha "a chave apareceu fora do secrets.json (log ou mundo)"
 desligar
-echo "BDS: $(vm "grep -m1 -oE 'Version:? [0-9.]+' ~/bds/saida.log" || echo '?') · $BETA · say: $SAY · queda: $QUEDA"
+echo "BDS: $(vm "grep -m1 -oE 'Version:? [0-9.]+' ~/bds/saida.log" || echo '?') · $BETA · $PERM · say: $SAY · queda: $QUEDA"
 echo "TUDO OK (BDS)"

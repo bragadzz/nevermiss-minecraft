@@ -130,6 +130,7 @@ for (const c of [
   "allowlist add Steve", "allowlist off", "ban-ip 1.2.3.4", '"op" Steve', "'op' Steve", '"" op Steve', "/ op Steve", "op Steve",
   "lp user Steve permission set *", 'setuperm Steve "*"', "lp user Steve permission set essentials.*", "say a\nop Steve", "say \x07",
   "", "   ", "/", "a".repeat(257), "end", "shutdown", "greload", "velocity reload", "reload all",
+  "//op Steve", "/ /op Steve", "op@a", "OP@a", "minecraft:op@s", '"/op" Steve', "execute@a ~ ~ ~ say x",
 ]) {
   ok(bloqueado(c), `devia bloquear: ${JSON.stringify(c)}`);
 }
@@ -161,7 +162,7 @@ for (const id of ["mcnick1", "mcnick2", "mcnick3", "mcnick4"]) {
 }
 ok(igual(jogo.rodados, ['give "Some Name" diamond 1', 'say "Some Name" comprou', "tell Some_Names oi", 'kit "Some Name" vip', 'tell "Some Name" oi', "give Alex diamond 1"]), `gamertag: ${JSON.stringify(jogo.rodados)}`);
 ok((await estado("mcgt")).estado === "entregue" && (await estado("mcgt2")).estado === "entregue", "gamertag não ficou entregue");
-ok(nomeNaApi("Some Name") === "Some_Name" && nomeNaApi("Steve") === "Steve" && nomeNaApi("a#1") === null, "nome do /kit na API");
+ok(nomeNaApi("Some Name") === "Some_Name" && nomeNaApi("Steve") === "Steve" && nomeNaApi("a#1") === null && nomeNaApi("Bo") === null, "nome do /kit na API");
 console.log("nick e gamertag: ok");
 
 // 5) Só com o jogador online: Alex fora não recebe; quando entra, o pull leva o nick e a entrega roda.
@@ -271,6 +272,9 @@ await entrega("mckitgt", "Cool Guy", [], { soOnline: true, edicaoJogador: "bedro
 await entrega("mckitnada", "Steve", ["say nao pode"], { soOnline: true, acoes: [{ tipo: "kit", darAgora: true, vezes: 1, kit: kit("6722", [{ ...espada, item: "netherite_sword" }]), resgate: null }] });
 await entrega("mcsoresgate", "Alex", [], { acoes: [{ tipo: "kit", darAgora: false, vezes: 1, kit: kit("6721", [espada]), resgate: { intervaloS: 60, ate: null } }] });
 await entrega("mckitruim", "Steve", [], { soOnline: true, acoes: [{ tipo: "kit", darAgora: true, vezes: 1, kit: { id: "x y" }, resgate: null }] });
+// Ação que o addon não conhece, ou um segundo kit: falha sem rodar nada (como o acaoDesconhecidaFalhaSemRodar do Java).
+await entrega("mcacao", "Steve", ["say nao pode"], { acoes: [{ tipo: "pet" }] });
+await entrega("mcacao2", "Steve", [], { acoes: [{ tipo: "kit", darAgora: false, vezes: 1, kit: kit("6721", [espada]), resgate: null }, { tipo: "pet" }] });
 jogo.naoExistem.add("netherite_sword");
 // A primeira volta só fica sabendo de quem espera (e volta em 5 s, porque eles estão online); a segunda entrega.
 ok((await n.ciclo()) === 5 && jogo.kitsDados.length === 0, "a volta com o jogador esperando online não adiantou");
@@ -281,10 +285,26 @@ ok((await estado("mckit")).estado === "entregue" && (await estado("mckitgt")).es
 e = await estado("mckitnada");
 ok(e.estado === "falhou" && e.motivo === "kit_incompativel", `mckitnada: ${JSON.stringify(e)}`);
 ok((await estado("mckitruim")).motivo === "erro", "kit fora do formato");
+ok((await estado("mcacao")).motivo === "erro" && (await estado("mcacao2")).motivo === "erro", "ação desconhecida não falhou");
 ok(Number(gk.m.get("nmr:mckit")) > 0 && !gk.m.has("nmr:mcsoresgate"), "o kit dado na compra não contou como o primeiro resgate");
 ok(jogo.mensagens.includes("Steve: §aVocê recebeu o kit VIP Diamante. Use /kit vip-diamante a cada 5 min."), `mensagem: ${JSON.stringify(jogo.mensagens)}`);
 r = n.executar({ id: "mckitfora", nick: "Bob", soOnline: false, teste: false, bedrock: false, comandos: [], kit: { darAgora: true, vezes: 1, kit: kit("6721", [espada]), resgate: null } });
 ok(r.estado === "adiada", `kit com o jogador fora: ${JSON.stringify(r)}`);
+r = n.executar({ id: "mckitsemnick", nick: null, soOnline: false, teste: false, bedrock: false, comandos: [], kit: { darAgora: true, vezes: 1, kit: kit("6721", [espada]), resgate: null } });
+ok(r.motivo === "kit_incompativel", `kit sem nick: ${JSON.stringify(r)}`);
+// Nenhum item entrou: kit_incompativel, sem a mensagem de "recebeu".
+const darKit = jogo.darKit;
+jogo.darKit = () => 0;
+jogo.mensagens = [];
+r = n.executar({ id: "mckitzero", nick: "Steve", soOnline: false, teste: false, bedrock: false, comandos: [], kit: { darAgora: true, vezes: 1, kit: kit("6721", [espada]), resgate: null } });
+ok(r.motivo === "kit_incompativel" && jogo.mensagens.length === 0, `kit sem nenhum item dado: ${JSON.stringify(r)} ${JSON.stringify(jogo.mensagens)}`);
+jogo.darKit = darKit;
+// O mundo não grava: nem o resgate nem o kit saem.
+const gr = guardaNova();
+const nr = new Nucleo(jogo, { ...gr, gravar: () => { throw new Error("cheio"); } }, "1.2.0");
+jogo.kitsDados = [];
+r = nr.executar({ id: "mckitdisco", nick: "Steve", soOnline: false, teste: false, bedrock: false, comandos: ["say x"], kit: { darAgora: true, vezes: 1, kit: kit("6721", [espada]), resgate: { intervaloS: 60 } } });
+ok(r.motivo === "erro" && jogo.kitsDados.length === 0 && !jogo.rodados.includes("say x"), `kit sem conseguir gravar: ${JSON.stringify(r)}`);
 console.log("kit na compra: ok");
 
 // 10) /kit (contrato, 17.4): a lista, o resgate com intervalo e o nome do jogador Bedrock com "_" na API.

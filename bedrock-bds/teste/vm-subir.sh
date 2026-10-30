@@ -7,7 +7,7 @@
 set -euo pipefail
 
 RAIZ=$(cd "$(dirname "$0")/.." && pwd)
-VM=${NM_VM:-$HOME/frentes-lojas/mbd-vm}
+VM=$HOME/frentes-lojas/mbd-vm
 NOME=nmbds
 LIMA_VERSAO=2.2.1
 LIMA_SHA=9e9eacce88f37e185c346bad73aa6136f738d8cdf8c3bb23cd42b071824bc66e

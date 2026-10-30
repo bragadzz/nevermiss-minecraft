@@ -28,14 +28,16 @@ São 6 passos com o servidor **parado**. `<mundo>` é o `level-name` do `server.
    - no Minecraft (Windows, celular, console): **Editar mundo › Experimentos › Beta APIs**, e copie o mundo para `worlds/`;
    - ou, com Python 3: `python3 ligar-beta-apis.py "worlds/<mundo>/level.dat"` (no Windows, `py` no lugar de `python3`).
      Ele guarda uma cópia em `level.dat.antes-da-nevermiss`.
-5. Libere a internet para os addons: em `config/default/permissions.json`, acrescente `"@minecraft/server-net"` em
-   `allowed_modules`:
+5. Libere a internet **só para este addon**: crie a pasta `config/4b243aaa-c498-417e-ad97-32a2c199f055/` (o id do script do
+   addon) e, dentro dela, um `permissions.json` com
    ```json
-   { "allowed_modules": ["@minecraft/server-gametest", "@minecraft/server", "@minecraft/server-ui", "@minecraft/server-admin",
-       "@minecraft/server-editor", "@minecraft/debug-utilities", "@minecraft/server-net"] }
+   { "allowed_modules": ["@minecraft/server", "@minecraft/server-net", "@minecraft/server-admin"] }
    ```
-   É o `permissions.json` de dentro de `config/default/`. O `permissions.json` da raiz (op e membro dos jogadores) não muda.
-6. A chave: crie `config/4b243aaa-c498-417e-ad97-32a2c199f055/secrets.json` (a pasta tem o id do script do addon) com
+   Os outros addons do servidor continuam sem internet, porque o `config/default/permissions.json` não muda. O
+   `permissions.json` da raiz (op e membro dos jogadores) também não muda. Se o console disser que o `@minecraft/server-net`
+   não é permitido, acrescente `"@minecraft/server-net"` em `allowed_modules` no `config/default/permissions.json`. Assim ele
+   vale para todos os addons do servidor.
+6. A chave: na mesma pasta, crie o `secrets.json` com
    ```json
    { "chave": "Bearer nmmc_SUA_CHAVE" }
    ```
@@ -112,9 +114,10 @@ O kit montado no painel é dado pelo addon, sem outro addon de kit: no espaço q
 - **Comandos proibidos**, recusados aqui e na NeverMiss (o painel não desliga): `op`, `deop`, `stop`, `restart`, `reload`,
   `rl`, `ban`, `ban-ip`, `banip`, `ipban`, `tempban`, `tempbanip`, `tempipban`, `pardon`, `pardon-ip`, `pardonip`, `unban`,
   `unbanip`, `whitelist`, `allowlist` (o whitelist do BDS), `execute`, `sudo`, `plugman`, `end`, `shutdown`, `greload`,
-  `velocity`, também com prefixo (`minecraft:op`), com o `e` na frente (`eban`), entre aspas (`"op"`, `"" op`), e a palavra
-  `*` ou `algo.*` sozinha. A entrega com um deles falha inteira (`bloqueado`) e nada roda. É uma lista de bloqueio, não uma
-  garantia: um comando que dá cargo de staff passa. Quem decide os comandos é você, no painel, com 2FA.
+  `velocity`, também com prefixo (`minecraft:op`), com o `e` na frente (`eban`), entre aspas (`"op"`, `"" op`), com mais de uma
+  barra (`//op`), colado no alvo (`op@a`), e a palavra `*` ou `algo.*` sozinha. A entrega com um deles falha inteira
+  (`bloqueado`) e nada roda. É uma lista de bloqueio, não uma garantia: um comando que dá cargo de staff passa. Quem decide os
+  comandos é você, no painel, com 2FA.
 - **Do comprador só vem o nick**, num formato fechado, conferido no checkout, na NeverMiss e de novo aqui antes de rodar.
 - **O addon nunca baixa nem roda código.** Da NeverMiss chegam só os textos dos comandos que você salvou no painel e os itens
   do kit.
@@ -128,7 +131,7 @@ O kit montado no painel é dado pelo addon, sem outro addon de kit: no espaço q
 | No console | O que fazer |
 |---|---|
 | Nada da NeverMiss ao ligar | Confira os passos 2 e 3; com `content-log-console-output-enabled=true` no `server.properties` o BDS mostra o erro do addon |
-| Erro do `@minecraft/server-net` ou do `@minecraft/server-admin` | Faltou o passo 4 (Beta APIs) ou o 5 (`permissions.json`) |
+| Erro do `@minecraft/server-net` ou do `@minecraft/server-admin` | Faltou o passo 4 (Beta APIs) ou o 5 (`permissions.json` na pasta do addon) |
 | `Sem chave` | O `secrets.json` não está em `config/4b243aaa-c498-417e-ad97-32a2c199f055/` (passo 6) |
 | `Chave inválida ou revogada` | Gere outra no painel; no `secrets.json` vai `Bearer ` antes da chave |
 | `O adicional Minecraft não está ativo nesta loja` | Contrate ou renove o adicional no painel |

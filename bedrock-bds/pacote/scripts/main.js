@@ -25,6 +25,16 @@ const jogador = (nome) => {
   const n = nome.toLowerCase();
   return world.getAllPlayers().find((p) => p.name.toLowerCase() === n);
 };
+// Quem está no servidor, lido uma vez por tick: a volta confere até 1000 nomes esperando e não pode pedir a lista 1000 vezes.
+let nomesNoTick = -1;
+let nomes = new Set();
+const online = (nome) => {
+  if (system.currentTick !== nomesNoTick) {
+    nomesNoTick = system.currentTick;
+    nomes = new Set(world.getAllPlayers().map((p) => p.name.toLowerCase()));
+  }
+  return nomes.has(nome.toLowerCase());
+};
 
 /** O item do kit como ItemStack do Bedrock. null = não existe no Bedrock. */
 function peca(item) {
@@ -68,7 +78,7 @@ const jogo = {
     // Lança erro com comando que não existe ou sintaxe errada; 0 sucessos = não fez nada (alvo offline, por exemplo).
     return world.getDimension("overworld").runCommand(comando).successCount > 0;
   },
-  online: (nome) => jogador(nome) !== undefined,
+  online,
   // Quem entra num BDS pela internet sempre passa pelo Xbox Live (o online-mode=false só vale na rede local).
   onlineMode: () => true,
   versao: () => "Bedrock Dedicated Server (Script API)",

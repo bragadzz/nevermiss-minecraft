@@ -34,10 +34,8 @@ export function validarApi(texto) {
   return esquema === "https" || (esquema === "http" && (host === "localhost" || host === "127.0.0.1")) ? limpo : null;
 }
 
-const semBarra = (c) => {
-  const t = c.trim();
-  return t.startsWith("/") ? t.slice(1) : t;
-};
+// Todas as barras e espaços do começo: o que roda é o mesmo texto que a lista proibida confere ("//op" e "/ /op" viram "op").
+const semBarra = (c) => c.trim().replace(/^[\s/]+/u, "");
 
 // Os argumentos como um console que entende aspas lê a linha: o que está entre aspas é um argumento só, e o "" some.
 function argumentos(linha) {
@@ -55,9 +53,10 @@ export function bloqueado(comando) {
   // Duas leituras: a da API (palavras separadas por espaço, sem as aspas das pontas) e a de um console que entende aspas.
   const palavras = texto.split(/[\s\p{Z}]+/u).map((p) => p.replace(/^["']+|["']+$/g, ""));
   const doConsole = argumentos(texto);
-  for (let primeira of [palavras[0] ?? "", doConsole[0] ?? ""]) {
-    const i = primeira.indexOf(":");
-    if (i >= 0) primeira = primeira.slice(i + 1);
+  for (const p of [palavras[0] ?? "", doConsole[0] ?? ""]) {
+    // O nome do comando vai até o primeiro caractere que não é de nome: o Bedrock pode ler "op@a" como "op @a".
+    const nome = p.replace(/^["'/]+/u, "").replace(/[^a-z0-9_:-].*$/su, "");
+    const primeira = nome.slice(nome.lastIndexOf(":") + 1);
     if (PROIBIDOS.has(primeira) || (primeira.startsWith("e") && PROIBIDOS.has(primeira.slice(1)))) return true;
   }
   return [...palavras, ...doConsole].some((p) => p === "*" || p.endsWith(".*"));
@@ -78,10 +77,14 @@ function comNome(comando, nome) {
     .join(" ");
 }
 
-/** O nome que a API guarda no direito do /kit num servidor Bedrock: o gamertag com "_" no lugar do espaço. */
+/**
+ * O nome que vai para a rota do /kit (contrato, 17.4), que só aceita o formato do nick: o gamertag com "_" no lugar do espaço.
+ * O que não vira nick (gamertag de 1 ou 2 letras) fica sem /kit, senão a rota recusaria o lote inteiro.
+ */
 export function nomeNaApi(nome) {
   if (typeof nome !== "string" || !(NICK.test(nome) || GAMERTAG.test(nome))) return null;
-  return nome.replace(/ /g, "_");
+  const n = nome.replace(/ /g, "_");
+  return NICK.test(n) ? n : null;
 }
 
 /** 200 s → "3 min 20 s"; o que sobra de um dia em horas; de uma hora, em minutos. */
@@ -255,6 +258,10 @@ export class Nucleo {
       this.jogo.log("Teste do painel recebido");
       return entregue(id, []);
     }
+    if (e.acaoDesconhecida) {
+      this.jogo.aviso(`Entrega ${id} recusada: traz o que este addon não sabe fazer. Atualize o addon NeverMiss.`);
+      return falhou(id, "erro");
+    }
     if (e.comandos.length === 0 && !e.kit) return entregue(id, []);
     const nome = e.nick;
     if (nome !== null && !(e.bedrock ? GAMERTAG : NICK).test(nome)) {
@@ -277,8 +284,11 @@ export class Nucleo {
       return falhou(id, "erro");
     }
     const darAgora = kit && kit.darAgora;
+    if (darAgora && nome === null) {
+      this.jogo.aviso(`Entrega ${id} recusada: o kit vai para o inventário do jogador, e a entrega não tem nick`);
+      return falhou(id, "kit_incompativel");
+    }
     if (nome !== null && (e.soOnline || darAgora) && !this.jogo.online(nome)) return adiada(id);
-    if (darAgora && nome === null) return falhou(id, "erro");
     if (prontos.some((p) => p.includes("{uuid}"))) {
       // A Script API não dá o UUID nem o XUID do jogador: o {uuid} não tem como sair no BDS.
       this.jogo.aviso(`Entrega ${id}: o {uuid} não existe no BDS (a Script API não dá o UUID nem o XUID do jogador). Use {nick}.`);
@@ -290,6 +300,8 @@ export class Nucleo {
     }
 
     try {
+      // O kit dado na compra conta como o primeiro resgate (o id da entrega é o id do direito): o próximo /kit só sai depois do intervalo.
+      if (darAgora && kit.resgate) this.resgates.marcar(id, agora());
       this.registro.marcarRodando(id);
     } catch (x) {
       this.jogo.aviso(`Não consegui gravar o registro no mundo, nada rodou: ${x?.message ?? x}`);
@@ -306,14 +318,12 @@ export class Nucleo {
       this.jogo.log(`${rodou ? "Rodou" : "Falhou"}: ${p}`);
       return rodou;
     });
-    let r = ok.every(Boolean) ? entregue(id, ok) : falhou(id, "comando_falhou", ok);
+    const r = ok.every(Boolean) ? entregue(id, ok) : falhou(id, "comando_falhou", ok);
     if (darAgora) {
-      // O kit dado na compra conta como o primeiro resgate (o id da entrega é o id do direito): marcado antes de dar.
-      if (kit.resgate) this.resgates.marcar(id, agora());
       const dados = this.jogo.darKit(nome, kit.kit, kit.vezes);
       this.jogo.log(`${nome} recebeu o kit ${kit.kit.nome} (${dados} itens)`);
+      if (dados === 0) return this.gravar(falhou(id, "kit_incompativel", ok));
       this.jogo.mensagem(nome, `§aVocê recebeu o kit ${kit.kit.nome}.` + (kit.resgate ? ` Use /kit ${kit.kit.chave} a cada ${tempo(kit.resgate.intervaloS * 1000)}.` : ""));
-      if (dados === 0 && r.estado === "entregue") r = falhou(id, "kit_incompativel", ok);
     }
     if (kit && kit.resgate && r.estado === "entregue" && nome !== null) this.kits.sujar(nome);
     return this.gravar(r);
@@ -414,8 +424,11 @@ export class Nucleo {
         this.jogo.aviso("Entrega com id inválido ignorada");
         continue;
       }
-      const acao = (Array.isArray(o.acoes) ? o.acoes : []).find((a) => a && a.tipo === "kit");
+      // Só uma ação "kit". A que este addon não conhece (ou um segundo kit) faz a entrega falhar sem rodar nada, como no Java.
+      const acoes = Array.isArray(o.acoes) ? o.acoes : [];
+      const acao = acoes[0] && acoes[0].tipo === "kit" ? acoes[0] : null;
       entregas.push({
+        acaoDesconhecida: acoes.length > (acao ? 1 : 0),
         id,
         nick: texto(o.nick),
         soOnline: o.soOnline === true,

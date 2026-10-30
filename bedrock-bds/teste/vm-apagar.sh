@@ -4,7 +4,7 @@
 # Uso: teste/vm-apagar.sh
 set -uo pipefail
 
-VM=${NM_VM:-$HOME/frentes-lojas/mbd-vm}
+VM=$HOME/frentes-lojas/mbd-vm
 NOME=nmbds
 export LIMA_HOME="$VM/lima"
 LIMACTL="$VM/lima-bin/bin/limactl"
