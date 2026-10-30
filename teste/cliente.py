@@ -7,6 +7,8 @@ Uso: python3 -I teste/cliente.py <porta> <nick> < comandos
 Os números dos pacotes são os de cada versão testada (1.7.10, 1.8.8, 1.12.2, 1.16.5, 1.20.4, 1.21.11 e 26.3); os do 1.21.11 e do 26.3
 saíram do relatório do próprio servidor da Mojang (java -DbundlerMainClass=net.minecraft.data.Main -jar server.jar --reports).
 Os do 1.20.1 (763) e do 1.21.1 (767), para o Fabric, saíram da tabela de pacotes de cada versão e ainda não rodaram.
+Os do 1.18.2 (758) e do 1.19.2 (760), para o Forge, também (não rodaram). O Forge 1.13+ pergunta pelos canais de mod no login:
+o cliente responde que não entende, como o vanilla.
 """
 import hashlib
 import json
@@ -25,6 +27,8 @@ PLAY = {
     47: (0x00, 0x00, 0x02, 0x01, 0x40, None),
     340: (0x1F, 0x0B, 0x0F, 0x02, 0x1A, None),
     754: (0x1F, 0x10, 0x0E, 0x03, 0x19, None),
+    758: (0x21, 0x0F, 0x0F, 0x03, 0x1A, None),
+    760: (0x20, 0x12, 0x62, 0x04, 0x19, None),
     763: (0x23, 0x12, 0x64, 0x04, 0x1A, None),
     765: (0x24, 0x15, 0x69, 0x04, 0x1B, None),
     767: (0x26, 0x18, 0x6C, 0x04, 0x1D, None),
@@ -135,6 +139,8 @@ def main():
         login += uuid.UUID(bytes=hashlib.md5(("OfflinePlayer:" + nick).encode()).digest(), version=3).bytes
     elif proto >= 761:  # 1.19.3 a 1.20.1: o UUID é opcional, e vai sem
         login += b"\0"
+    elif proto == 760:  # 1.19.1 e 1.19.2: sem a chave de chat e sem o UUID
+        login += b"\0\0"
     c.mandar(0x00, login)
 
     estado = "login"
@@ -144,6 +150,8 @@ def main():
             if pid == 0x00:
                 print("SAIU " + legivel(dados), flush=True)
                 return 1
+            if pid == 0x04 and proto >= 393:  # pergunta de um canal de mod (Forge): "não entendo", como o vanilla
+                c.mandar(0x02, varint(varint_de(dados)[0]) + b"\0")
             if pid == 0x03:
                 print("SAIU o servidor ligou a compressão: use network-compression-threshold=-1", flush=True)
                 return 1
@@ -176,9 +184,11 @@ def main():
             linha = linha.strip()
             if not linha:
                 continue
-            if proto >= 763:
+            if proto >= 760:
                 dados = texto(linha)
-                if proto <= 765:  # 1.20.1 a 1.20.4: o comando ainda leva o carimbo da assinatura, vazio
+                if proto == 760:  # 1.19.1 e 1.19.2: o carimbo, sem assinaturas, sem prévia e sem mensagem vista
+                    dados += struct.pack(">qq", int(time.time() * 1000), 0) + varint(0) + b"\0" + varint(0) + b"\0"
+                elif proto <= 765:  # 1.20.1 a 1.20.4: o comando ainda leva o carimbo da assinatura, vazio
                     dados += struct.pack(">qq", int(time.time() * 1000), 0) + varint(0) + varint(0) + b"\0\0\0"
                 c.mandar(cmd_out, dados)
             else:

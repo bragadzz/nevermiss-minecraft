@@ -3,3 +3,4 @@ rootProject.name = 'nevermiss-minecraft'
 // core: o laço de entrega, sem servidor (Java 8 puro). Cada plataforma gera o seu jar com o core dentro.
 include 'core', 'bukkit', 'velocity', 'bungee'
 include 'fabric'
+include 'forge', 'forge12'

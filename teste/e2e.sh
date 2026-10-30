@@ -7,6 +7,8 @@
 #   bedrock: instala o Floodgate (e o Geyser, no servidor) e entrega para um jogador Bedrock.
 #   fabric 1.20.1 | fabric 1.21.1 | fabric 26.3: o servidor pelo instalador oficial do Fabric (FABRIC_LOADER escolhe o
 #     loader), só com o NeverMiss em mods/, sem o Fabric API. Sem bedrock (o Geyser do Fabric pede o Fabric API).
+#   forge 1.12.2 | 1.16.5 | 1.18.2 | 1.19.2 | 1.20.1 e neoforge 1.20.4 | 1.21.1 | 26.3: o instalador oficial do Forge ou do
+#     NeoForge (FORGE escolhe a versão dele), com o NeverMiss em mods/. Sem bedrock. O 1.12.2 pede o Java 8.
 #   No servidor de jogo (menos o Folia), um jogador falso (teste/cliente.py) entra e recebe o Kit da NeverMiss.
 # JAVA=/caminho/do/java escolhe o Java; JAVA_BACKEND, o do Paper atrás do proxy.
 set -euo pipefail
@@ -35,11 +37,12 @@ case "$PLATAFORMA" in
   velocity) PROXY=1 ; JAR=velocity ; PASTA=nevermiss ; PRONTO='Done (' ; PARAR=shutdown ;;
   waterfall | bungeecord) PROXY=1 ; JAR=bungee ; PASTA=NeverMiss ; PRONTO='Listening on ' ; PARAR=end ;;
   fabric) PROXY= ; JAR=fabric ; PASTA=nevermiss ; PRONTO='Done (' ; PARAR=stop ;;
+  forge | neoforge) PROXY= ; JAR=forge ; PASTA=nevermiss ; PRONTO='Done (' ; PARAR=stop ;;
   *) echo "Plataforma desconhecida: $PLATAFORMA"; exit 2 ;;
 esac
-# A pasta do plugin (o executadas.txt e o resgates.txt). No Fabric é a config/nevermiss.
-if [ "$PLATAFORMA" = fabric ]; then DADOS="$DIR/config/$PASTA"; else DADOS="$DIR/plugins/$PASTA"; fi
-if [ "$PLATAFORMA" = fabric ] && [ -n "$BEDROCK" ]; then echo "O e2e do Fabric não tem Bedrock"; exit 2; fi
+# A pasta do plugin (o executadas.txt e o resgates.txt). No Fabric e no Forge é a config/nevermiss.
+if [ "$JAR" = fabric ] || [ "$JAR" = forge ]; then DADOS="$DIR/config/$PASTA"; else DADOS="$DIR/plugins/$PASTA"; fi
+if [ "$JAR" = fabric ] || [ "$JAR" = forge ] && [ -n "$BEDROCK" ]; then echo "O e2e do $PLATAFORMA não tem Bedrock"; exit 2; fi
 case "$PLATAFORMA" in paper | spigot) ESPERA=bukkit ;; waterfall | bungeecord) ESPERA=bungee ;; *) ESPERA=$PLATAFORMA ;; esac
 
 falha() {
@@ -80,14 +83,15 @@ servidorBukkit() {
   printf 'chave: "%s"\napi: "%s"\n' "$3" "$4" > "$1/plugins/NeverMiss/config.yml"
   cp "$RAIZ/bukkit/build/libs/NeverMiss-Bukkit-"*.jar "$1/plugins/"
 }
-# servidorFabric <pasta> <porta> <chave> <api>: o mesmo servidor, com o mod em mods/ e a config em config/nevermiss
+# servidorFabric <pasta> <porta> <chave> <api> [jar]: o mesmo servidor, com o mod em mods/ e a config em config/nevermiss
+# (o Forge e o NeoForge também, com o jar deles)
 servidorFabric() {
   rm -rf "$1/world" "$1/logs" "$1/config/nevermiss" "$1/mods/"NeverMiss-*.jar
   mkdir -p "$1/config/nevermiss" "$1/mods"
   echo "eula=true" > "$1/eula.txt"
   printf 'online-mode=false\nserver-ip=127.0.0.1\nserver-port=%s\nlevel-type=flat\ngenerate-structures=false\nspawn-protection=0\nenforce-secure-profile=false\nnetwork-compression-threshold=-1\nwhite-list=false\n' "$2" > "$1/server.properties"
   printf 'chave: "%s"\napi: "%s"\n' "$3" "$4" > "$1/config/nevermiss/config.yml"
-  cp "$RAIZ/fabric/build/libs/NeverMiss-Fabric-"*.jar "$1/mods/"
+  cp "${5:-$(ls "$RAIZ/fabric/build/libs/NeverMiss-Fabric-"*.jar)}" "$1/mods/"
 }
 # instalarFabric <versão> <pasta>: o instalador oficial (maven.fabricmc.net, sha256 conferido) baixa o servidor da Mojang e o
 # Fabric Loader; o servidor.jar é o lançador que ele gera.
@@ -100,6 +104,29 @@ instalarFabric() {
   [ -f "$SERV/fabric-installer-$INST.jar" ] || baixar "$URL" "$(curl -fsS "$URL.sha256")" "$SERV/fabric-installer-$INST.jar"
   nice "$JAVA" -jar "$SERV/fabric-installer-$INST.jar" server -dir "$2" -mcversion "$1" -loader "$LOADER" -downloadMinecraft
   cp "$2/fabric-server-launch.jar" "$2/servidor.jar"
+}
+# instalarForge <forge|neoforge> <versão do jogo> <pasta>: o instalador oficial (maven do Forge ou do NeoForge, sha256
+# conferido) baixa o servidor da Mojang e as bibliotecas. FORGE escolhe a versão do carregador; sem ela, a recomendada do
+# Forge ou a mais nova do NeoForge daquela versão do jogo (o 21.1.x é o do 1.21.1). Em lancar.txt fica o jeito de ligar:
+# o jar do Forge (1.12.2 e 1.16.5) ou o arquivo de argumentos (Forge 1.17+ e NeoForge).
+instalarForge() {
+  [ -f "$3/lancar.txt" ] && return 0
+  local V URL ARGS
+  if [ "$1" = forge ]; then
+    V=${FORGE:-$(curl -fsS https://files.minecraftforge.net/net/minecraftforge/forge/promotions_slim.json |
+      python3 -c 'import json,sys; p=json.load(sys.stdin)["promos"]; print(p.get(sys.argv[1]+"-recommended") or p[sys.argv[1]+"-latest"])' "$2")}
+    URL="https://maven.minecraftforge.net/net/minecraftforge/forge/$2-$V/forge-$2-$V-installer.jar"
+  else
+    V=${FORGE:-$(curl -fsS https://maven.neoforged.net/releases/net/neoforged/neoforge/maven-metadata.xml |
+      python3 -c 'import re,sys; p=(sys.argv[1][2:] if sys.argv[1].startswith("1.") else sys.argv[1])+"."; v=[x for x in re.findall(r"<version>([^<]+)</version>", sys.stdin.read()) if x.startswith(p) and "beta" not in x]; print(max(v, key=lambda x: [int(n) for n in re.findall(r"[0-9]+", x)]))' "$2")}
+    URL="https://maven.neoforged.net/releases/net/neoforged/neoforge/$V/neoforge-$V-installer.jar"
+  fi
+  mkdir -p "$3"
+  baixar "$URL" "$(curl -fsS "$URL.sha256")" "$3/instalador.jar"
+  (cd "$3" && nice "$JAVA" -jar instalador.jar --installServer . > instalar.log 2>&1) || falha "o instalador do $1 $V falhou: $(tail -5 "$3/instalar.log")"
+  ARGS=$(cd "$3" && find libraries -name unix_args.txt | head -1)
+  if [ -n "$ARGS" ]; then echo "@$ARGS" > "$3/lancar.txt"
+  else echo "-jar $(cd "$3" && ls forge-*.jar | grep -v installer | head -1)" > "$3/lancar.txt"; fi
 }
 
 # 1) Os jars e a API falsa (o build também roda os testes).
@@ -117,6 +144,7 @@ case "$PLATAFORMA" in
     shasum -a 256 "$DIR/servidor.jar" ;;
   spigot) [ -f "$DIR/servidor.jar" ] || falha "falta o $DIR/servidor.jar (java -jar BuildTools.jar --rev $VERSAO)" ;;
   fabric) instalarFabric "$VERSAO" "$DIR" ;;
+  forge | neoforge) instalarForge "$PLATAFORMA" "$VERSAO" "$DIR" ;;
 esac
 # O Waterfall baixa os comandos dele (glist, alert...) da api.papermc.io/v2, que foi desligada: vão antes, da v3.
 if [ "$PLATAFORMA" = waterfall ] && [ ! -d "$DIR/modules" ]; then
@@ -136,6 +164,10 @@ fi
 rm -f "$DIR/plugins/"floodgate*.jar "$DIR/plugins/"geyser*.jar
 if [ "$PLATAFORMA" = fabric ]; then
   servidorFabric "$DIR" "$PORTA_MC" "$CHAVE" "$API"
+elif [ "$JAR" = forge ]; then
+  # O Forge 1.12.2 tem o jar dele (o FML antigo); os outros e o NeoForge, o mesmo
+  if [ "$VERSAO" = 1.12.2 ]; then MODULO=forge12; else MODULO=forge; fi
+  servidorFabric "$DIR" "$PORTA_MC" "$CHAVE" "$API" "$(ls "$RAIZ/$MODULO/build/libs/NeverMiss-Forge-"*.jar)"
 elif [ -z "$PROXY" ]; then
   servidorBukkit "$DIR" "$PORTA_MC" "$CHAVE" "$API"
   if [ -n "$BEDROCK" ]; then
@@ -185,7 +217,8 @@ noLog() { grep -q -- "$1" "$DIR/saida.log"; }
 noLogDe() { grep -q -- "$2" "$1/saida.log"; }
 ligar() { # ligar <pasta> <java> <fd>
   rm -f "$1/console.fifo" && mkfifo "$1/console.fifo"
-  (cd "$1" && exec nice "$2" -Xmx1G -jar servidor.jar nogui < console.fifo > saida.log 2>&1) &
+  # O Forge 1.17+ e o NeoForge ligam por um arquivo de argumentos (o lancar.txt do instalarForge)
+  (cd "$1" && exec nice "$2" -Xmx1G $(cat lancar.txt 2>/dev/null || echo -jar servidor.jar) nogui < console.fifo > saida.log 2>&1) &
   LIGOU=$!
   PIDS="$PIDS $LIGOU"
   eval "exec $3> \"$1/console.fifo\""

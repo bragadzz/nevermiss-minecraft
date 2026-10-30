@@ -16,6 +16,8 @@ Ou monta um **Kit da NeverMiss** no painel: o plugin põe os itens no inventári
 | Spigot, Paper e forks | `NeverMiss-Bukkit-1.2.0.jar` | 1.7.10 ao mais novo (26.x), Java 8 ou mais novo | Paper 1.7.10, 1.8.8, 1.12.2, 1.16.5, 1.20.4, 1.21.11 e 26.3 |
 | Folia | `NeverMiss-Bukkit-1.2.0.jar` (o mesmo) | 1.19.4 em diante | Folia 1.21.11 |
 | Fabric (só no servidor, sem o Fabric API: o jar vai em `mods/`, a chave em `config/nevermiss/config.yml`, e o `/nevermiss` é de op nível 3) | `NeverMiss-Fabric-1.16.5-26.x-1.2.0.jar` | 1.16.5 ao 26.x, um jar só, Fabric Loader 0.14 ou mais novo | ainda não rodou num servidor Fabric de verdade: só nos testes sem servidor e conferido com os nomes do jogo de cada versão |
+| Forge e NeoForge (só no servidor: o jar vai em `mods/`, a chave em `config/nevermiss/config.yml`, e o `/nevermiss` é de op nível 3) | `NeverMiss-Forge-1.16.5-26.x-1.2.0.jar` | Forge 1.16.5 ao 1.20.1 e NeoForge 1.20.4 ao 26.x, um jar só | ainda não rodou num servidor Forge ou NeoForge de verdade: só no teste sem servidor e conferido com os nomes do jogo e as classes do Forge e do NeoForge de cada versão |
+| Forge 1.12.2 (o mesmo jeito) | `NeverMiss-Forge-1.12.2-1.2.0.jar` | 1.12.2 | ainda não rodou num servidor de verdade: conferido com os nomes do jogo e as classes do Forge 1.12.2 |
 | Velocity (proxy) | `NeverMiss-Velocity-1.2.0.jar` | 3.1.1 em diante | Velocity 3.5.1 e 4.3.1 |
 | BungeeCord e Waterfall (proxy) | `NeverMiss-Bungee-1.2.0.jar` | API do 1.16 em diante | BungeeCord build 2107 e Waterfall 1.21 |
 | Bedrock (Geyser + Floodgate) | qualquer um dos três | Floodgate 2.x | Paper 1.21.11 com Geyser 2.12.1 e Floodgate 2.2.5; Velocity e BungeeCord com Floodgate 2.2.5 |
