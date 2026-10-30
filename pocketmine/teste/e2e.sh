@@ -43,6 +43,9 @@ anonymous-statistics:
   enabled: false
 auto-report:
   enabled: false
+# Servidor novo do PocketMine 5 guarda os dados em plugin_data/<plugin>; sem isto, um pocketmine.yml incompleto cai na pasta antiga plugins/<plugin>
+plugins:
+  legacy-data-dir: false
 YML
 printf 'chave: "%s"\napi: "%s"\n' "$CHAVE" "$API" > "$DIR/plugin_data/NeverMiss/config.yml"
 cp "$RAIZ/build/NeverMiss-PocketMine-"*.phar "$DIR/plugins/"

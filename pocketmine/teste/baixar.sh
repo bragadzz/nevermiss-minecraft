@@ -21,4 +21,8 @@ mkdir -p "$B"
 baixar "https://github.com/pmmp/PocketMine-MP/releases/download/$PM_VERSAO/PocketMine-MP.phar" "$B/PocketMine-MP.phar" "$PM_SHA"
 baixar "https://github.com/pmmp/PHP-Binaries/releases/download/pm5-php-8.2-latest/$PHP_ARQ" "$B/php.tar.gz" "$PHP_SHA"
 [ -x "$B/bin/php7/bin/php" ] || tar xzf "$B/php.tar.gz" -C "$B"
+# O php.ini do pmmp para macOS aponta as extensões para a pasta de onde ele foi compilado: sem o extension_dir local, o
+# opcache não carrega e o aviso quebra o leitor do console (o PocketMine não lê o "nevermiss chave")
+EXT=$(echo "$B"/bin/php7/lib/php/extensions/no-debug-zts-*)
+grep -q '^extension_dir' "$B/bin/php7/bin/php.ini" || echo "extension_dir=\"$EXT\"" >> "$B/bin/php7/bin/php.ini"
 echo "$B/bin/php7/bin/php"
