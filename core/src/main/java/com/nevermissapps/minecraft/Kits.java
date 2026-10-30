@@ -255,7 +255,7 @@ final class Kits {
         if (kit == null) return "§cVocê não tem esse kit. Use /kit para ver os seus.";
         if (livre == null) return "§eEspere " + tempo(falta) + " para pegar o kit " + kit.nome + " de novo.";
         if (!jogo.online(nome)) return null;
-        if (!kit.algumExiste(jogo)) return "§cNenhum item deste kit existe na versão deste servidor.";
+        if (kit.existem(jogo) == 0) return "§cNenhum item deste kit existe na versão deste servidor.";
         try {
             resgates.marcar(livre.id, agora);
         } catch (IOException e) {

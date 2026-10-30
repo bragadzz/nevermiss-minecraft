@@ -328,6 +328,44 @@ public class KitTest {
     }
 
     @Test
+    public void jogadorBedrockComResgateRecusaOKitSemRodar() throws IOException {
+        jogo.bedrock = new Bedrock(".");
+        ApiFalsa.Entrega comResgate = entregaVip("mcbedrock", "Cool Guy", true, 1, 300);
+        comResgate.edicaoJogador = "bedrock";
+        comResgate.comandos.add("say {nick} comprou");
+        ApiFalsa.Entrega soDaCompra = entregaVip("mcbedrock2", "Cool Guy", true, 1, null);
+        soDaCompra.edicaoJogador = "bedrock";
+        jogo.online.add(".Cool_Guy");
+        Nucleo n = nucleo();
+        n.ciclo();
+        n.ciclo();
+        assertEquals("kit_incompativel", api.entrega("mcbedrock").motivo);
+        assertTrue(jogo.log.toString(), jogo.log.contains("AVISO Entrega mcbedrock recusada: o kit VIP Diamante tem resgate com /kit, "
+                + "e o /kit da NeverMiss ainda não funciona para jogador Bedrock. Nada rodou."));
+        // Sem resgate, o kit da compra sai no nome do Floodgate
+        assertEquals("entregue", api.entrega("mcbedrock2").estado);
+        assertEquals(6, jogo.rodou.size());
+        assertTrue(jogo.rodou.get(0), jogo.rodou.get(0).startsWith("item replace entity .Cool_Guy hotbar.0 with minecraft:diamond_sword"));
+    }
+
+    @Test
+    public void kitGrandeDemaisFalhaSemRodarEUmaEntregaPorTick() throws IOException {
+        // 167 × 6 = 1002 itens: passa do teto; 166 × 6 = 996, não
+        entregaVip("mcgrande", "Steve", true, 167, null);
+        entregaVip("mcteto", "Steve", true, 166, null);
+        jogo.online.add("Steve");
+        int[] voltas = {0};
+        jogo.antesDaPrincipal = () -> voltas[0]++;
+        Nucleo n = nucleo();
+        n.ciclo();
+        n.ciclo();
+        assertEquals("kit_incompativel", api.entrega("mcgrande").motivo);
+        assertEquals("entregue", api.entrega("mcteto").estado);
+        assertEquals(996, jogo.rodou.size());
+        assertEquals(2, voltas[0]);
+    }
+
+    @Test
     public void acaoDesconhecidaFalhaSemRodar() throws IOException {
         ApiFalsa.Entrega e = api.adicionar("mcacao", "Steve", false, "say oi");
         e.acoes = JsonParser.parseString("[{\"tipo\":\"pet\"}]").getAsJsonArray();

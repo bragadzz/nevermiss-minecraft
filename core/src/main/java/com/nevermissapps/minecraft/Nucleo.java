@@ -50,6 +50,8 @@ final class Nucleo {
     // Quantos nicks esperando o jogador entrar a API manda (e o plugin devolve os que estão online).
     private static final int MAX_ESPERANDO = 1000;
     private static final int MAX_LOTE = 50;
+    // Itens de kit numa entrega (as vezes compradas × os itens): cada um é um comando, no mesmo tick, e o que não cabe cai no chão.
+    static final int MAX_PECAS = 1000;
 
     private final Jogo jogo;
     private final Registro registro;
@@ -180,21 +182,17 @@ final class Nucleo {
                 }
             }
         }
-        if (!entregas.isEmpty()) {
-            List<Resultado> feitos;
+        // Uma entrega por volta da thread principal: vários kits no mesmo pull não pesam todos no mesmo tick.
+        for (Entrega e : entregas) {
             try {
-                feitos = jogo.naPrincipal(() -> {
-                    List<Resultado> l = new ArrayList<>();
-                    for (Entrega e : entregas) l.add(executar(e));
-                    return l;
-                });
+                enfileirar(jogo.naPrincipal(() -> executar(e)));
             } catch (Exception x) {
                 // Servidor desligando: o que não rodou volta na próxima consulta.
+                confirmar();
                 return 30;
             }
-            for (Resultado f : feitos) enfileirar(f);
-            confirmar();
         }
+        if (!entregas.isEmpty()) confirmar();
 
         for (String n : esperando) if (!enviados.contains(n) && online(n)) return 5;
         return Math.max(10, Math.min(300, inteiro(r.json.get("proximaEm"), 30)));
@@ -219,8 +217,14 @@ final class Nucleo {
                     : "o kit vai para o inventário do jogador, e o proxy não tem inventário: entregue o kit pelo plugin do servidor de jogo"));
             return Resultado.falhou(e.id, "kit_incompativel", null);
         }
+        // O /kit ainda não funciona para o jogador Bedrock (a rota dos kits só aceita o nick Java): o resgate dele nunca sairia.
+        if (e.kit != null && e.intervaloMs > 0 && e.bedrock) {
+            jogo.aviso("Entrega " + e.id + " recusada: o kit " + e.kit.nome + " tem resgate com /kit, e o /kit da NeverMiss ainda não"
+                    + " funciona para jogador Bedrock. Nada rodou.");
+            return Resultado.falhou(e.id, "kit_incompativel", null);
+        }
         boolean darKit = e.kit != null && e.darAgora;
-        if (e.kit != null && e.intervaloMs > 0 && e.nick != null && !e.bedrock) comResgate.put(e.id, e.nick);
+        if (e.kit != null && e.intervaloMs > 0 && e.nick != null) comResgate.put(e.id, e.nick);
         if (e.comandos.isEmpty() && !darKit) return Resultado.entregue(e.id, new boolean[0]);
         if (e.nick != null && !(e.bedrock ? Bedrock.GAMERTAG : NICK).matcher(e.nick).matches()) {
             jogo.aviso("Entrega " + e.id + " recusada: nick inválido");
@@ -252,8 +256,15 @@ final class Nucleo {
         }
         // O item só entra no inventário com o jogador no servidor.
         if ((e.soOnline || darKit) && nome != null && !jogo.online(nome)) return Resultado.adiada(e.id);
-        if (darKit && !e.kit.algumExiste(jogo)) {
+        int pecas = darKit ? e.kit.existem(jogo) : 0;
+        if (darKit && pecas == 0) {
             jogo.aviso("Entrega " + e.id + " recusada: nenhum item do kit " + e.kit.nome + " existe na versão deste servidor");
+            return Resultado.falhou(e.id, "kit_incompativel", null);
+        }
+        // atalho: teto por entrega, tudo num tick. Para passar dele, dar em lotes de vários ticks (com o jogador podendo sair no meio).
+        if (darKit && pecas * e.vezes > MAX_PECAS) {
+            jogo.aviso("Entrega " + e.id + " recusada: o kit " + e.kit.nome + " sai " + e.vezes + " vezes, " + pecas * e.vezes
+                    + " itens, e o máximo numa entrega é " + MAX_PECAS + " (o servidor travaria e quase tudo cairia no chão). Nada rodou.");
             return Resultado.falhou(e.id, "kit_incompativel", null);
         }
 

@@ -3,7 +3,7 @@
 # Uso: teste/e2e.sh <plataforma> <versão> [bedrock]
 #   paper 1.20.4 | paper 1.7.10 | folia 1.21.11 | spigot 1.21.11 (o spigot.jar do BuildTools em teste/servidores/spigot-<versão>/servidor.jar)
 #   velocity 3.5.1 | waterfall 1.21 | bungeecord latest: sobe também um Paper atrás do proxy (BACKEND=1.20.4),
-#     com o plugin do servidor e outra chave, e confere que os dois entregam juntos.
+#     com o plugin do servidor e outra chave, e confere que os dois entregam juntos. SO_PROXY=1: só o proxy (um servidor ligado).
 #   bedrock: instala o Floodgate (e o Geyser, no servidor) e entrega para um jogador Bedrock.
 #   fabric 1.20.1 | fabric 1.21.1 | fabric 26.3: o servidor pelo instalador oficial do Fabric (FABRIC_LOADER escolhe o
 #     loader), só com o NeverMiss em mods/, sem o Fabric API. Sem bedrock (o Geyser do Fabric pede o Fabric API).
@@ -45,6 +45,9 @@ esac
 # A pasta do plugin (o executadas.txt e o resgates.txt). No Fabric e no Forge é a config/nevermiss.
 if [ "$JAR" = fabric ] || [ "$JAR" = forge ]; then DADOS="$DIR/config/$PASTA"; else DADOS="$DIR/plugins/$PASTA"; fi
 if [ "$JAR" = fabric ] || [ "$JAR" = forge ] && [ -n "$BEDROCK" ]; then echo "O e2e do $PLATAFORMA não tem Bedrock"; exit 2; fi
+# O Paper atrás do proxy (sem ele com SO_PROXY=1)
+ATRAS=$PROXY
+if [ -n "${SO_PROXY:-}" ]; then ATRAS=; fi
 case "$PLATAFORMA" in paper | spigot) ESPERA=bukkit ;; waterfall | bungeecord) ESPERA=bungee ;; *) ESPERA=$PLATAFORMA ;; esac
 
 falha() {
@@ -199,6 +202,8 @@ else
     baixarGeyserMC floodgate "$GM" "$SERV/floodgate-$GM.jar"
     cp "$SERV/floodgate-$GM.jar" "$DIR/plugins/"
   fi
+fi
+if [ -n "$ATRAS" ]; then
   # O Paper atrás do proxy (modo BungeeCord), com o plugin do servidor e outra chave.
   mkdir -p "$SERV/paper-$BACKEND" "$FUNDO/cache"
   baixarPaperMC paper "$BACKEND" "$SERV/paper-$BACKEND/servidor.jar"
@@ -229,7 +234,7 @@ esperarLigar() { # esperarLigar <pasta> <texto> <pid>
   for _ in $(seq 300); do noLogDe "$1" "$2" && return 0; kill -0 "$3" 2>/dev/null || falha "$1 não subiu"; sleep 1; done
   falha "$1 não terminou de ligar"
 }
-if [ -n "$PROXY" ]; then
+if [ -n "$ATRAS" ]; then
   nice "$JAVA" -cp "$CP" com.nevermissapps.minecraft.ApiFalsa "$((PORTA_API + 1))" "$CHAVE2" 5000 10 > "$FUNDO/api.log" 2>&1 &
   PIDS="$PIDS $!"
   ligar "$FUNDO" "$JAVA_BACKEND" 4
@@ -283,7 +288,7 @@ entrega "{\"id\":\"mcuuid\",\"nick\":\"Notch\",\"comandos\":[\"$UUID_CMD\"]}"
 entrega '{"id":"mcteste","evento":"teste","comandos":[]}'
 entrega '{"id":"mcfalha","nick":"Steve","comandos":["comandoquenaoexiste Steve"]}'
 entrega "{\"id\":\"mcbedrock\",\"nick\":\"Cool Guy\",\"edicaoJogador\":\"bedrock\",\"comandos\":[\"$BEDROCK_CMD\"]}"
-if [ -n "$PROXY" ]; then entrega '{"id":"mcfundo","nick":"Steve","comandos":["say coexiste"]}' "$API2"; fi
+if [ -n "$ATRAS" ]; then entrega '{"id":"mcfundo","nick":"Steve","comandos":["say coexiste"]}' "$API2"; fi
 
 espera mcinterrompida "falhou interrompida" 40
 espera mc1 "entregue" 40
@@ -301,8 +306,15 @@ fi
 espera mcteste "entregue" 5
 espera mcfalha "falhou comando_falhou" 5
 if [ -n "$BEDROCK" ]; then espera mcbedrock "entregue" 5; else espera mcbedrock "falhou sem_bedrock" 5; fi
-if [ -n "$PROXY" ]; then espera mcfundo "entregue" 40 "$API2"; fi
+if [ -n "$ATRAS" ]; then espera mcfundo "entregue" 40 "$API2"; fi
 echo "T13/T15/T17/T19/T21 e Bedrock: ok"
+if [ -n "$PROXY" ]; then
+  # O proxy não tem inventário: o kit que chegar a ele é recusado e nada roda.
+  entrega '{"id":"mckitproxy","nick":"Steve","comandos":[],"acoes":[{"tipo":"kit","darAgora":true,"vezes":1,"kit":{"id":"k1","nome":"K","chave":"k","equipar":true,"itens":[{"espaco":0,"item":"diamond","qtd":1}]},"resgate":{"intervaloS":30}}]}'
+  espera mckitproxy "falhou kit_incompativel" 30
+  noLog "Rodou: .*diamond" && falha "o proxy rodou o kit"
+  echo "Kit no proxy recusado: ok"
+fi
 
 # 6) Confirmação perdida 2 vezes (T14): volta pelo lease, o plugin não roda de novo.
 curl -fsS -X POST "$API/teste/cortar" >/dev/null
@@ -374,19 +386,19 @@ PY
 }
 if [ -n "$KIT" ]; then
   jogador Kiteiro 5
-  entrega "$(cat <<'JSON'
-{"id":"mckit","nick":"Kiteiro","soOnline":true,"comandos":[],"acoes":[{"tipo":"kit","darAgora":true,"vezes":1,
- "kit":{"id":"kitvip","nome":"VIP Diamante","chave":"vip-diamante","equipar":true,"itens":[
+  KITVIP=$(cat <<'JSON'
+{"id":"kitvip","nome":"VIP Diamante","chave":"vip-diamante","equipar":true,"itens":[
   {"espaco":0,"item":"diamond_sword","itemLegado":"DIAMOND_SWORD","qtd":1,"encantamentos":[{"id":"sharpness","idLegado":"DAMAGE_ALL","nivel":5}],
    "nome":"&bLâmina VIP","descricao":"Só para VIP"},
   {"espaco":1,"item":"golden_apple","itemLegado":"GOLDEN_APPLE","qtd":64,"encantamentos":[]},
   {"espaco":36,"item":"diamond_boots","itemLegado":"DIAMOND_BOOTS","qtd":1,"encantamentos":[]},
   {"espaco":37,"item":"diamond_leggings","itemLegado":"DIAMOND_LEGGINGS","qtd":1,"encantamentos":[]},
   {"espaco":38,"item":"diamond_chestplate","itemLegado":"DIAMOND_CHESTPLATE","qtd":1,"encantamentos":[]},
-  {"espaco":39,"item":"diamond_helmet","itemLegado":"DIAMOND_HELMET","qtd":1,"encantamentos":[]}]},
- "resgate":{"intervaloS":15,"ate":null}}]}
+  {"espaco":39,"item":"diamond_helmet","itemLegado":"DIAMOND_HELMET","qtd":1,"encantamentos":[]}]}
 JSON
-)"
+)
+  entrega '{"id":"mckit","nick":"Kiteiro","soOnline":true,"comandos":[],"acoes":[{"tipo":"kit","darAgora":true,"vezes":1,"kit":'"$KITVIP"',
+ "resgate":{"intervaloS":15,"ate":null}}]}'
   espera mckit "entregue" 40
   DEU=$(date +%s)
   chat Kiteiro "recebeu o kit VIP Diamante. Use /kit vip-diamante a cada 15 s" 1 10
@@ -409,6 +421,16 @@ JSON
   noLog "Kiteiro pegou o kit VIP Diamante (/kit, 6 itens)" || falha "o /kit não deu os 6 itens"
   [ "$(grep -c '^mckit ' "$DADOS/resgates.txt")" = 2 ] || falha "o resgates.txt não tem a compra e o /kit"
   grep -q "CHAT .*pegou" "$DIR/Curioso.log" && falha "quem não comprou pegou o kit"
+  # Recusados sem dar nada: o kit com resgate para jogador Bedrock (o /kit dele ainda não funciona; aqui sem esperar ele
+  # entrar, que não tem Floodgate) e o kit grande demais
+  # (1000 vezes × 6 itens passa do teto de 1000 itens numa entrega).
+  entrega '{"id":"mckitbedrock","nick":"Cool Guy","edicaoJogador":"bedrock","soOnline":false,"comandos":[],"acoes":[{"tipo":"kit","darAgora":true,"vezes":1,"kit":'"$KITVIP"',"resgate":{"intervaloS":15,"ate":null}}]}'
+  entrega '{"id":"mckitgrande","nick":"Kiteiro","soOnline":true,"comandos":[],"acoes":[{"tipo":"kit","darAgora":true,"vezes":1000,"kit":'"$KITVIP"'}]}'
+  espera mckitbedrock "falhou kit_incompativel" 40
+  espera mckitgrande "falhou kit_incompativel" 40
+  noLog "ainda não funciona para jogador Bedrock. Nada rodou" || falha "o console não explicou o kit Bedrock recusado"
+  noLog "6000 itens, e o máximo numa entrega é 1000" || falha "o console não explicou o kit grande demais"
+  [ "$(grep -c 'Kit VIP Diamante para ' "$DIR/saida.log")" = 1 ] || falha "um kit recusado deu itens"
   echo "Kit e /kit: ok"
 fi
 
@@ -451,7 +473,7 @@ if [ -n "$BEDROCK" ]; then
 else
   noLog 'este servidor não aceita Bedrock: instale Geyser + Floodgate' || falha "a entrega Bedrock sem Floodgate não avisou"
 fi
-if [ -n "$PROXY" ]; then
+if [ -n "$ATRAS" ]; then
   noLogDe "$FUNDO" 'Rodou: say coexiste' || falha "o plugin do Paper atrás do proxy não entregou"
   grep -rq "$CHAVE2" "$FUNDO/saida.log" "$FUNDO/logs" 2>/dev/null && falha "a chave do Paper apareceu no log"
 fi
@@ -460,9 +482,9 @@ grep -rq "$CHAVE" "$DIR/saida.log" "$DIR/logs" 2>/dev/null && falha "a chave apa
 console "$PARAR"
 wait "$PID_MC" || true
 exec 3>&-
-if [ -n "$PROXY" ]; then
+if [ -n "$ATRAS" ]; then
   echo "stop" >&4
   wait "$PID_FUNDO" || true
   exec 4>&-
 fi
-echo "TUDO OK ($PLATAFORMA $VERSAO${BEDROCK:+ com Geyser/Floodgate}${PROXY:+ + Paper $BACKEND atrás})"
+echo "TUDO OK ($PLATAFORMA $VERSAO${BEDROCK:+ com Geyser/Floodgate}${ATRAS:+ + Paper $BACKEND atrás})"
