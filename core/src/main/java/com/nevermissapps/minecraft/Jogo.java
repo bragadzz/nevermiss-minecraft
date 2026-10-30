@@ -36,6 +36,11 @@ interface Jogo {
         return "java";
     }
 
+    /** O nome do jogador como entra no comando. No servidor Bedrock o gamertag pode ter espaço: a plataforma põe as aspas. */
+    default String nomeNoComando(String nome) {
+        return nome;
+    }
+
     /** O Floodgate, quando este servidor (ou proxy) aceita jogadores Bedrock. null = não aceita. */
     Bedrock bedrock();
 

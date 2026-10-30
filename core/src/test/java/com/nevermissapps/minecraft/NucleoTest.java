@@ -350,6 +350,42 @@ public class NucleoTest {
     }
 
     @Test
+    public void servidorBedrockUsaOGamertagComAspas() throws IOException {
+        jogo.edicao = "bedrock";
+        jogo.plataforma = "nukkit";
+        jogo.onlineMode = true;
+        api.adicionar("mc40", "Cool Guy", false, "give {nick} diamond 1").edicaoJogador = "bedrock";
+        api.adicionar("mc41", "Cool Guy", true, "say {nick} entrou").edicaoJogador = "bedrock";
+        // A lista proibida vale para o comando montado, com as aspas.
+        api.adicionar("mc42", "Stop Now", false, "{nick} Steve").edicaoJogador = "bedrock";
+        // Sem o jogador online, o {uuid} não sai.
+        api.adicionar("mc43", "Cool Guy", false, "lp user {uuid} parent add vip").edicaoJogador = "bedrock";
+        api.adicionar("mc44", "Steve", false, "say Steve comprou");
+        Nucleo n = nucleo();
+        n.ciclo();
+        assertEquals(Arrays.asList("give \"Cool Guy\" diamond 1", "say Steve comprou"), jogo.rodou);
+        assertEquals("pendente", api.entrega("mc41").estado);
+        assertEquals("bloqueado", api.entrega("mc42").motivo);
+        assertEquals("erro", api.entrega("mc43").motivo);
+        assertTrue(n.aoEntrar("cool guy"));
+        String corpo = api.pulls.get(0).toString();
+        assertTrue(corpo, corpo.contains("\"plataforma\":\"nukkit\",\"edicao\":\"bedrock\",\"bedrock\":null"));
+        assertEquals("[]", api.pulls.get(0).get("recursos").toString());
+        assertEquals("Bedrock: servidor Bedrock (o nome do jogador é o gamertag)", n.status().get(4));
+
+        // Online, o {uuid} é o que o servidor der (o do Bedrock não é da versão 4).
+        UUID xuid = UUID.nameUUIDFromBytes("pocket-auth-1-xuid:2535".getBytes(StandardCharsets.UTF_8));
+        jogo.uuids.put("Cool Guy", xuid);
+        jogo.online.add("Cool Guy");
+        api.adicionar("mc45", "Cool Guy", false, "lp user {uuid} parent add vip").edicaoJogador = "bedrock";
+        n.ciclo();
+        n.ciclo();
+        assertTrue(jogo.rodou.toString(), jogo.rodou.contains("say \"Cool Guy\" entrou"));
+        assertTrue(jogo.rodou.toString(), jogo.rodou.contains("lp user " + xuid + " parent add vip"));
+        assertEquals("entregue", api.entrega("mc45").estado);
+    }
+
+    @Test
     public void bedrockSoOnlineEsperaPeloNomeNoServidor() throws IOException {
         jogo.bedrock = new BedrockFalso(".");
         api.adicionar("mc25", "Cool Guy", true, "give {nick} diamond 1").edicaoJogador = "bedrock";
@@ -480,6 +516,7 @@ public class NucleoTest {
         final List<Runnable> agendadas = new ArrayList<>();
         int canceladas;
         String plataforma = "bukkit";
+        String edicao = "java";
         Bedrock bedrock;
         final Set<String> online = new HashSet<>();
         final Set<String> falha = new HashSet<>();
@@ -543,6 +580,14 @@ public class NucleoTest {
 
         public Bedrock bedrock() {
             return bedrock;
+        }
+
+        public String edicao() {
+            return edicao;
+        }
+
+        public String nomeNoComando(String nome) {
+            return nome.indexOf(' ') >= 0 ? "\"" + nome + "\"" : nome;
         }
 
         public int[] versaoMc() {

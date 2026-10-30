@@ -310,6 +310,24 @@ public class KitTest {
     }
 
     @Test
+    public void servidorBedrockRecusaOKitAteSoODoResgate() throws IOException {
+        jogo.versao = null;
+        jogo.edicao = "bedrock";
+        jogo.plataforma = "nukkit";
+        entregaVip("mckit", "Steve", true, 1, null);
+        entregaVip("mcresgate", "Steve", false, 1, 300);
+        jogo.online.add("Steve");
+        Nucleo n = nucleo();
+        n.ciclo();
+        n.ciclo();
+        assertEquals("kit_incompativel", api.entrega("mckit").motivo);
+        assertEquals("kit_incompativel", api.entrega("mcresgate").motivo);
+        assertTrue(jogo.log.toString(), jogo.log.contains("AVISO Entrega mckit recusada: o Kit da NeverMiss ainda não sai em servidor Bedrock "
+                + "(o painel monta o kit com os itens do Java). Entregue com comandos (give)."));
+        assertTrue(jogo.rodou.isEmpty());
+    }
+
+    @Test
     public void acaoDesconhecidaFalhaSemRodar() throws IOException {
         ApiFalsa.Entrega e = api.adicionar("mcacao", "Steve", false, "say oi");
         e.acoes = JsonParser.parseString("[{\"tipo\":\"pet\"}]").getAsJsonArray();
