@@ -4,29 +4,34 @@ Plugin que entrega no seu servidor o que você vende pela NeverMiss, no Discord 
 Você escreve no painel os comandos de cada produto; o plugin roda esses comandos no console quando a venda é paga.
 Ou monta um **Kit da NeverMiss** no painel: o plugin põe os itens no inventário do comprador, sem precisar de outro plugin.
 
-- Servidor de jogo (Spigot, Paper, Folia e forks) e proxy (Velocity, BungeeCord e Waterfall).
-- Jogadores Java e Bedrock (pelo Geyser + Floodgate).
+- Servidor de jogo (Spigot, Paper, Folia e forks; Fabric, Forge e NeoForge; PowerNukkitX, de Bedrock) e proxy (Velocity, BungeeCord e Waterfall).
+- Jogadores Java e Bedrock (pelo Geyser + Floodgate, ou no servidor Bedrock).
 - Servidor original e pirata (offline-mode).
 - Código aberto, licença MIT.
 
 ## Plataformas
 
-| Onde | Jar | Versões | Testado em |
-|---|---|---|---|
-| Spigot, Paper e forks | `NeverMiss-Bukkit-1.2.0.jar` | 1.7.10 ao mais novo (26.x), Java 8 ou mais novo | Paper 1.7.10, 1.8.8, 1.12.2, 1.16.5, 1.20.4, 1.21.11 e 26.3 |
-| Folia | `NeverMiss-Bukkit-1.2.0.jar` (o mesmo) | 1.19.4 em diante | Folia 1.21.11 |
-| Velocity (proxy) | `NeverMiss-Velocity-1.2.0.jar` | 3.1.1 em diante | Velocity 3.5.1 e 4.3.1 |
-| BungeeCord e Waterfall (proxy) | `NeverMiss-Bungee-1.2.0.jar` | API do 1.16 em diante | BungeeCord build 2107 e Waterfall 1.21 |
-| Bedrock (Geyser + Floodgate) | qualquer um dos três | Floodgate 2.x | Paper 1.21.11 com Geyser 2.12.1 e Floodgate 2.2.5; Velocity e BungeeCord com Floodgate 2.2.5 |
+| Plataforma | Versões | Arquivo | Kit da NeverMiss | Provado num servidor de verdade (`teste/e2e.sh`) | Sem prova |
+|---|---|---|---|---|---|
+| Spigot, Paper e forks | 1.7.10 ao 26.x | `NeverMiss-Bukkit-1.2.0.jar` | sim | Com o kit e o `/kit` por um jogador: Paper 1.8.8, 1.12.2, 1.20.4 e 1.21.11 (código final), e 1.7.10, 1.16.5 e 26.3 (1.2.0 antes das últimas correções do core). O catálogo inteiro de itens do painel em 1.8.8, 1.12.2, 1.20.4 e 1.21.11 | Spigot puro (BuildTools). No 1.7.10 o inventário só foi conferido fora do teste |
+| Folia | 1.19.4 em diante | `NeverMiss-Bukkit-1.2.0.jar` (o mesmo) | não (o item precisa ir na região do jogador) | Folia 1.21.11 sem kit (1.2.0 antes das últimas correções do core) | Folia com o código final |
+| Fabric (só no servidor, sem o Fabric API) | 1.16.5 ao 26.x, Fabric Loader 0.14+ | `NeverMiss-Fabric-1.16.5-26.x-1.2.0.jar` | sim | Nenhum: só os testes sem servidor e os nomes do jogo conferidos nos mapas oficiais de 14 versões | Tudo num servidor de verdade (entrega, kit, `/kit`). Bedrock |
+| Forge (só no servidor) | 1.16.5 ao 1.20.1 | `NeverMiss-Forge-1.16.5-1.20.1-NeoForge-1.20.4-26.x-1.2.0.jar` | sim | Nenhum: só o teste sem servidor e os nomes conferidos nos mapas e nas classes do Forge de cada versão | Tudo num servidor de verdade. O Forge 1.20.2 em diante não é atendido: o servidor sobe e o console avisa que o NeverMiss não entrega nada |
+| NeoForge (só no servidor) | 1.20.4 ao 26.x | o mesmo do Forge | sim | Nenhum, como o Forge | Tudo num servidor de verdade |
+| Forge 1.12.2 (só no servidor) | 1.12.2 | `NeverMiss-Forge-1.12.2-1.2.0.jar` | sim | Nenhum: compila contra os nomes do jogo, conferidos nos mapas MCP | Tudo num servidor de verdade. Sem Bedrock |
+| PowerNukkitX (servidor Bedrock) | 3.x (Java 25) | `NeverMiss-PowerNukkitX-3.x-1.2.0.jar` | não (o catálogo tem só os itens do Java) | PowerNukkitX 3.0.6 com o código final, com um jogador Bedrock entrando pelo NetherNet | O 3.0.5 parou na entrada do jogador. O `{uuid}` com conta Xbox. Nukkit, Nukkit-MOT e PowerNukkitX 2.x não são atendidos |
+| Velocity (proxy) | 3.1.1 em diante | `NeverMiss-Velocity-1.2.0.jar` | não (proxy não tem inventário) | Velocity 3.5.1 sozinho, com o código final (o kit que chega é recusado). Na 1.1.0: 3.5.1 e 4.3.1 com um Paper atrás | Velocity 4.3.1 e a entrega com um Paper atrás, com a 1.2.0 |
+| BungeeCord e Waterfall (proxy) | API do 1.16 em diante | `NeverMiss-Bungee-1.2.0.jar` | não | Na 1.1.0: BungeeCord build 2107 e Waterfall 1.21, com um Paper atrás | Os dois com a 1.2.0 |
+| Bedrock pelo Geyser + Floodgate | Floodgate 2.x | o do Bukkit, Velocity ou Bungee | só o da compra (sem `/kit`) | Na 1.1.0: Paper 1.21.11 com Geyser 2.12.1 e Floodgate 2.2.5; Velocity e BungeeCord com Floodgate 2.2.5 | Com a 1.2.0, e o kit dado a um jogador Bedrock (só no teste do core). No Fabric, no Forge e no NeoForge |
 
-O Kit da NeverMiss (abaixo) foi testado com um jogador no servidor em Paper 1.7.10, 1.8.8, 1.12.2, 1.16.5, 1.20.4, 1.21.11 e 26.3, e o catálogo inteiro de itens do painel em Paper 1.8.8, 1.12.2, 1.20.4 e 1.21.11.
-
-O Java é o que o seu servidor já pede: o plugin roda em todos.
+- **Spigot, Paper, Folia e PowerNukkitX:** o jar vai em `plugins/`. **Fabric, Forge e NeoForge:** em `mods/`, a chave em `config/nevermiss/config.yml`, e o `/nevermiss` é de quem pode o `/op` (nível 3). O jogador não instala nada.
+- **PowerNukkitX:** o `{nick}` é o gamertag, entre aspas quando tem espaço; o `{uuid}` só com o jogador online. Entregue com comandos (`give {nick} diamond 3`).
+- O Java é o que o seu servidor já pede: o plugin roda em todos (Java 8 em diante; o do Velocity, 11).
 
 ## Instalar
 
 1. No painel da NeverMiss, em **Minecraft › Servidores**, toque em **Adicionar servidor**. A chave aparece **uma vez só**: copie.
-2. Ponha o jar da sua plataforma (tabela acima) na pasta `plugins/` e reinicie.
+2. Ponha o jar da sua plataforma (tabela acima) na pasta `plugins/` (no Fabric, no Forge e no NeoForge, `mods/`) e reinicie.
 3. No console (do servidor ou do proxy): `nevermiss chave <a chave>`.
 4. Em até 1 minuto o painel mostra **Conectado**.
 
@@ -38,8 +43,8 @@ Quem tem o `NeverMiss-1.0.0.jar` ou o `NeverMiss-Bukkit-1.1.0.jar`: apague ele e
 
 | Onde | Como |
 |---|---|
-| Console | `nevermiss chave nmmc_...` (só no console, nunca no chat) |
-| `config.yml` (`plugins/NeverMiss/`, ou `plugins/nevermiss/` no Velocity) | `chave: "nmmc_..."` e depois `nevermiss recarregar` |
+| Console | `nevermiss chave nmmc_...` (só no console, nunca no chat; no Fabric e no Forge 1.16.5+ o RCON também conta como console) |
+| `config.yml` (`plugins/NeverMiss/`, `plugins/nevermiss/` no Velocity, `config/nevermiss/` no Fabric, no Forge e no NeoForge) | `chave: "nmmc_..."` e depois `nevermiss recarregar` |
 | Variável de ambiente | `NEVERMISS_CHAVE=nmmc_...` (usada quando o `config.yml` está sem chave) |
 
 A chave só lê e confirma as entregas **deste** servidor. Vazou? Troque no painel (**Trocar chave**): a antiga para na hora.
@@ -69,16 +74,19 @@ A chave só lê e confirma as entregas **deste** servidor. Vazou? Troque no pain
 No painel, em **Minecraft › Kits**, você monta o inventário (itens, quantidade, encantamentos, nome e descrição) e liga o kit na variação do produto: **Dar ao comprar** e/ou **Resgate com /kit**, a cada quanto tempo e até quando.
 
 - **Na compra:** o plugin põe cada item no espaço que você escolheu, se estiver vazio; a armadura vai direto para o corpo ("Equipar a armadura sozinho"); o que não couber vai para o inventário e o resto cai no chão, aos pés do jogador. O jogador precisa estar no servidor: a entrega espera ele entrar. Ele recebe `Você recebeu o kit VIP Diamante. Use /kit vip-diamante a cada 5 min.`
-- **`/kit <nome>`** (ou **`/nmkit <nome>`**, se o servidor já tem o `/kit` do EssentialsX): o comprador pega o kit de novo depois do intervalo, até o fim do prazo. O kit da compra conta como o primeiro. `/kit` sozinho lista os kits dele com o tempo que falta. Quem comprou duas vezes tem dois resgates, cada um com o seu intervalo. Permissão `nevermiss.kit` (todos têm).
+- **`/kit <nome>`** (ou **`/nmkit <nome>`**, se o servidor já tem o `/kit` do EssentialsX ou de outro mod): o comprador pega o kit de novo depois do intervalo, até o fim do prazo. O kit da compra conta como o primeiro. `/kit` sozinho lista os kits dele com o tempo que falta. Quem comprou duas vezes tem dois resgates, cada um com o seu intervalo. Permissão `nevermiss.kit` (todos têm).
 - O kit sai **como está no painel na hora**: editar o kit vale para as próximas entregas e resgates.
 - **Versão:** o item usa o nome de cada versão (do 1.13 em diante o moderno, `diamond_sword`; antes, o antigo). O item que não existe na versão do servidor (netherite no 1.8) é pulado; se nenhum existir, a entrega falha (`kit_incompativel`).
-- **Onde:** só no Spigot/Paper (do 1.7.10 ao 26.x). O Folia ainda não dá kit, e o proxy (Velocity, BungeeCord) não tem inventário: a NeverMiss não manda kit para eles. Jogador Bedrock (Geyser) recebe o kit da compra normalmente; o `/kit` dele ainda não funciona.
+- **Onde:** Spigot/Paper (provado do 1.7.10 ao 26.x), Fabric, Forge e NeoForge (ainda sem prova num servidor de verdade, tabela acima). O Folia, o PowerNukkitX e o proxy (Velocity, BungeeCord) não dão kit: a NeverMiss não manda kit para eles, e o que chegar falha (`kit_incompativel`) sem rodar nada.
+- **Jogador Bedrock (Geyser):** recebe o kit da compra no nome do Floodgate. O `/kit` dele ainda não funciona, então o kit **com resgate** para ele falha inteiro (`kit_incompativel`) e nada roda, nem o da compra.
+- **Até 1000 itens por entrega** (as vezes compradas × os itens do kit): acima disso a entrega falha (`kit_incompativel`) e nada roda, porque o servidor travaria e quase tudo cairia no chão. Um kit de 6 itens vai até 166 de uma vez.
+- **Uma chave por servidor.** O intervalo do `/kit` fica no `resgates.txt` de cada servidor: com a mesma chave em dois servidores, o comprador pega o kit em cada um.
 - **Nunca dá 2 vezes:** o kit da compra segue o `executadas.txt`, como os comandos. A hora de cada `/kit` vai para o `resgates.txt` (na pasta do plugin) antes de dar os itens. Não apague esse arquivo: sem ele o intervalo zera.
-- Por dentro, o plugin dá cada item com o comando do próprio jogo (`give` e `item replace`, ou o `replaceitem` antes do 1.17, sempre como `minecraft:give`, para o `/give` de outro plugin não pegar). No 1.7.10 e no 1.8, pela API do Bukkit.
+- Por dentro, o plugin dá cada item com o comando do próprio jogo (`give` e `item replace`, ou o `replaceitem` antes do 1.17; no Bukkit sempre como `minecraft:give`, para o `/give` de outro plugin não pegar; no Fabric e no Forge, direto no despachante de comandos do jogo). No 1.7.10 e no 1.8, pela API do Bukkit.
 
 ## Comandos
 
-Permissão `nevermiss.admin` (vem para op; no proxy, dê pelo plugin de permissão do proxy). O console sempre pode.
+Permissão `nevermiss.admin` (vem para op; no proxy, dê pelo plugin de permissão do proxy; no Fabric, no Forge e no NeoForge, quem pode o `/op`). O console sempre pode.
 
 | Comando | O que faz |
 |---|---|
@@ -129,25 +137,29 @@ Em servidor pirata, o comprador é identificado pelo nick. Um nick digitado erra
 | `Atualize o plugin NeverMiss` | Baixe a versão nova |
 | `Sem resposta da NeverMiss (SSLHandshakeException)` | Java muito antigo: atualize o Java do servidor |
 | `este servidor não aceita Bedrock: instale Geyser + Floodgate` | Instale o Floodgate aqui, ou entregue pelo plugin do proxy que tem o Floodgate |
+| `Este Forge não tem o que o NeverMiss usa` (ou `Este Minecraft`, no Fabric) | A versão não é atendida (o Forge 1.20.2 em diante, por exemplo): use o NeoForge, ou o Forge 1.16.5 ao 1.20.1 |
 
 ## Compilar e testar
 
-Precisa de JDK 17 (os jars saem para Java 8; o do Velocity, para Java 11).
+Precisa do JDK 17 (os jars saem para Java 8; o do Velocity, para Java 11). O do PowerNukkitX compila com o `javac` do JDK 25, em `JAVA25_HOME`: sem ele, saem todos os outros.
 
 ```sh
-./gradlew build                        # os 3 jars em bukkit/, velocity/ e bungee/build/libs; roda os testes do core
+JAVA25_HOME=/caminho/do/jdk-25 ./gradlew build   # os jars em <módulo>/build/libs; roda os testes do core, do Fabric e do Forge
 teste/e2e.sh paper 1.20.4              # servidor de verdade + API falsa
 teste/e2e.sh paper 1.21.11 bedrock     # com Geyser e Floodgate
 teste/e2e.sh folia 1.21.11
 teste/e2e.sh velocity 3.5.1            # proxy + um Paper atrás, com o plugin do servidor e outra chave
+SO_PROXY=1 teste/e2e.sh velocity 3.5.1 # só o proxy: um servidor ligado de cada vez
 teste/e2e.sh waterfall 1.21
 teste/e2e.sh bungeecord latest bedrock # com o Floodgate no proxy
+teste/e2e.sh powernukkitx 3.0.6        # servidor Bedrock, com um jogador Bedrock pelo NetherNet (Java 25)
+teste/e2e.sh fabric 1.21.1             # escritos, ainda não rodaram: fabric 1.20.1 | 26.3, forge 1.12.2 | 1.16.5 | 1.20.1, neoforge 1.21.1 | 26.3
 ```
 
-- Cada versão pede o seu Java (`JAVA=/caminho/do/java`; `JAVA_BACKEND` para o Paper atrás do proxy): o 1.16.5 vai até o Java 16, o 1.20.5+, o Folia e o Velocity 3.4+ pedem o 21, e o 26.x e o Velocity 4 pedem o 25.
-- `core/`: o laço (`Nucleo`), a config e o `/nevermiss` (`Laco`), o `executadas.txt` (`Registro`), o Floodgate (`Bedrock`), o kit e os comandos dele por versão (`Kit`), o `/kit` (`Kits`) e o `resgates.txt` (`Resgates`), sem servidor. `Jogo` é o que cada plataforma implementa.
-- `core/src/test/.../NucleoTest.java` e `KitTest.java`: o laço inteiro e o kit contra a API falsa (`ApiFalsa.java`), sem servidor, com o comando do kit de cada versão.
-- `teste/e2e.sh`: baixa o servidor da fonte oficial (PaperMC, Mojang, md_5, GeyserMC), sobe em `127.0.0.1` e confere entrega, comando proibido, `{uuid}`, teste do painel, comando que falha, entrega interrompida, confirmação perdida, a entrega Bedrock e a plataforma que vai para a API. No Spigot/Paper, um jogador falso (`teste/cliente.py`, pirata) entra e recebe um kit (armadura de diamante no corpo, espada com Afiação V e 64 maçãs douradas), que o próprio jogo confere (`data get`, ou `testfor` antes do 1.13), e usa o `/kit` com intervalo; outro jogador, que não comprou, não pega. Termina com `TUDO OK`.
+- Cada versão pede o seu Java (`JAVA=/caminho/do/java`; `JAVA_BACKEND` para o Paper atrás do proxy): o 1.16.5 vai até o Java 16, o 1.20.5+, o Folia e o Velocity 3.4+ pedem o 21, o 26.x, o Velocity 4 e o PowerNukkitX 3 pedem o 25, e o Forge 1.12.2, o 8.
+- `core/`: o laço (`Nucleo`), a config e o `/nevermiss` (`Laco`), o `executadas.txt` (`Registro`), o Floodgate (`Bedrock`), o kit e os comandos dele por versão (`Kit`), o `/kit` (`Kits`) e o `resgates.txt` (`Resgates`), sem servidor. `Jogo` é o que cada plataforma implementa: `bukkit/`, `velocity/`, `bungee/`, `fabric/`, `forge/` (Forge 1.16.5+ e NeoForge), `forge12/` e `nukkit/` (PowerNukkitX).
+- `core/src/test/.../NucleoTest.java` e `KitTest.java`: o laço inteiro e o kit contra a API falsa (`ApiFalsa.java`), sem servidor, com o comando do kit de cada versão. `fabric/src/test` e `forge/src/test`: o mod com o Brigadier de verdade e um jogo de mentira.
+- `teste/e2e.sh`: baixa o servidor da fonte oficial (PaperMC, Mojang, md_5, GeyserMC, Fabric, Forge, NeoForge, PowerNukkitX), sobe em `127.0.0.1` e confere entrega, comando proibido, `{uuid}`, teste do painel, comando que falha, entrega interrompida, confirmação perdida, a entrega Bedrock e a plataforma que vai para a API. No servidor de jogo, um jogador falso (`teste/cliente.py`, pirata) entra e recebe um kit (armadura de diamante no corpo, espada com Afiação V e 64 maçãs douradas), que o próprio jogo confere (`data get`, ou `testfor` antes do 1.13), e usa o `/kit` com intervalo; outro jogador, que não comprou, não pega; o kit com resgate para jogador Bedrock e o kit grande demais são recusados sem dar nada. No proxy, o kit que chega é recusado. Termina com `TUDO OK`.
 
 ## Licença
 

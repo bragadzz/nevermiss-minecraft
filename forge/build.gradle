@@ -1,0 +1,34 @@
+// Forge 1.16.5 ao 1.20.1 e NeoForge 1.20.4 ao 26.x num jar só (ver Forge.java). Compila só contra o Brigadier, que é o mesmo
+// em todos, e o log4j: o jogo e os eventos vão por reflexão. As anotações @Mod do Forge e do NeoForge vêm de stubs, fora do jar.
+evaluationDependsOn(':core')
+
+sourceSets {
+    stubs
+}
+
+repositories {
+    maven { url = 'https://libraries.minecraft.net/' }
+}
+
+dependencies {
+    compileOnly sourceSets.stubs.output
+    // O Brigadier do 1.16.5, o mais antigo: o jar só usa o que existe nele e no do 26.x (1.3.11).
+    compileOnly 'com.mojang:brigadier:1.0.17'
+    compileOnly 'org.apache.logging.log4j:log4j-api:2.8.1'
+
+    testImplementation 'junit:junit:4.13.2'
+    testImplementation 'com.google.code.gson:gson:2.10.1'
+    testImplementation 'com.mojang:brigadier:1.0.17'
+    testImplementation 'org.apache.logging.log4j:log4j-api:2.8.1'
+    // A API falsa do core
+    testImplementation project(':core').sourceSets.test.output
+}
+
+processResources {
+    filteringCharset = 'UTF-8'
+    filesMatching(['META-INF/mods.toml', 'META-INF/neoforge.mods.toml', '**/versao.txt']) { expand(version: project.version) }
+}
+
+shadowJar {
+    archiveFileName = "NeverMiss-Forge-1.16.5-1.20.1-NeoForge-1.20.4-26.x-${project.version}.jar"
+}

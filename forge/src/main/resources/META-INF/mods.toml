@@ -1,0 +1,14 @@
+# Forge 1.16.5 ao 1.20.1 e NeoForge 1.20.4 (o NeoForge 1.20.5+ lê o neoforge.mods.toml, igual a este).
+# Sem dependências: o "forge" não existe no NeoForge, e o mod não precisa de nenhum outro.
+modLoader = "javafml"
+loaderVersion = "[1,)"
+license = "MIT"
+
+[[mods]]
+modId = "nevermiss"
+version = "${version}"
+displayName = "NeverMiss"
+description = "Entrega no servidor o que foi vendido pela NeverMiss."
+displayURL = "https://nevermissapps.com"
+# Só no servidor: o jogador entra sem o mod (Forge 1.19+ e NeoForge leem isto)
+displayTest = "IGNORE_SERVER_VERSION"

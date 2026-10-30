@@ -50,6 +50,8 @@ final class Nucleo {
     // Quantos nicks esperando o jogador entrar a API manda (e o plugin devolve os que estão online).
     private static final int MAX_ESPERANDO = 1000;
     private static final int MAX_LOTE = 50;
+    // Itens de kit numa entrega (as vezes compradas × os itens): cada um é um comando, no mesmo tick, e o que não cabe cai no chão.
+    static final int MAX_PECAS = 1000;
 
     private final Jogo jogo;
     private final Registro registro;
@@ -133,6 +135,11 @@ final class Nucleo {
         return b != null && Bedrock.GAMERTAG.matcher(gamertag).matches() ? b.nome(gamertag) : null;
     }
 
+    /** Servidor Bedrock de verdade (Nukkit, PowerNukkitX): o jogador entra com o gamertag, sem Floodgate. */
+    private boolean nativo() {
+        return "bedrock".equals(jogo.edicao());
+    }
+
     /** A lista "esperando" não diz a edição: vale o nick Java ou o gamertag Bedrock. */
     private boolean online(String nick) {
         String b = nomeBedrock(nick);
@@ -175,21 +182,17 @@ final class Nucleo {
                 }
             }
         }
-        if (!entregas.isEmpty()) {
-            List<Resultado> feitos;
+        // Uma entrega por volta da thread principal: vários kits no mesmo pull não pesam todos no mesmo tick.
+        for (Entrega e : entregas) {
             try {
-                feitos = jogo.naPrincipal(() -> {
-                    List<Resultado> l = new ArrayList<>();
-                    for (Entrega e : entregas) l.add(executar(e));
-                    return l;
-                });
+                enfileirar(jogo.naPrincipal(() -> executar(e)));
             } catch (Exception x) {
                 // Servidor desligando: o que não rodou volta na próxima consulta.
+                confirmar();
                 return 30;
             }
-            for (Resultado f : feitos) enfileirar(f);
-            confirmar();
         }
+        if (!entregas.isEmpty()) confirmar();
 
         for (String n : esperando) if (!enviados.contains(n) && online(n)) return 5;
         return Math.max(10, Math.min(300, inteiro(r.json.get("proximaEm"), 30)));
@@ -208,8 +211,20 @@ final class Nucleo {
             jogo.aviso("Entrega " + e.id + " recusada: traz o que este plugin não sabe fazer. Atualize o plugin NeverMiss.");
             return Resultado.falhou(e.id, "erro", null);
         }
+        if (e.kit != null && jogo.versaoMc() == null) {
+            jogo.aviso("Entrega " + e.id + " recusada: " + (nativo()
+                    ? "o Kit da NeverMiss ainda não sai em servidor Bedrock (o painel monta o kit com os itens do Java). Entregue com comandos (give)."
+                    : "o kit vai para o inventário do jogador, e o proxy não tem inventário: entregue o kit pelo plugin do servidor de jogo"));
+            return Resultado.falhou(e.id, "kit_incompativel", null);
+        }
+        // O /kit ainda não funciona para o jogador Bedrock (a rota dos kits só aceita o nick Java): o resgate dele nunca sairia.
+        if (e.kit != null && e.intervaloMs > 0 && e.bedrock) {
+            jogo.aviso("Entrega " + e.id + " recusada: o kit " + e.kit.nome + " tem resgate com /kit, e o /kit da NeverMiss ainda não"
+                    + " funciona para jogador Bedrock. Nada rodou.");
+            return Resultado.falhou(e.id, "kit_incompativel", null);
+        }
         boolean darKit = e.kit != null && e.darAgora;
-        if (e.kit != null && e.intervaloMs > 0 && e.nick != null && !e.bedrock) comResgate.put(e.id, e.nick);
+        if (e.kit != null && e.intervaloMs > 0 && e.nick != null) comResgate.put(e.id, e.nick);
         if (e.comandos.isEmpty() && !darKit) return Resultado.entregue(e.id, new boolean[0]);
         if (e.nick != null && !(e.bedrock ? Bedrock.GAMERTAG : NICK).matcher(e.nick).matches()) {
             jogo.aviso("Entrega " + e.id + " recusada: nick inválido");
@@ -217,7 +232,8 @@ final class Nucleo {
         }
         if (e.comandos.size() > MAX_COMANDOS) return Resultado.falhou(e.id, "bloqueado", null);
         String nome = e.nick;
-        if (e.bedrock && e.nick != null) {
+        // No servidor Bedrock (Nukkit) o nome no servidor é o próprio gamertag. Nos outros, o do Floodgate.
+        if (e.bedrock && e.nick != null && !nativo()) {
             if (jogo.bedrock() == null) {
                 jogo.aviso("Entrega " + e.id + " recusada: este servidor não aceita Bedrock: instale Geyser + Floodgate");
                 return Resultado.falhou(e.id, "sem_bedrock", null);
@@ -227,22 +243,28 @@ final class Nucleo {
         List<String> prontos = new ArrayList<>();
         for (String c : e.comandos) {
             // No Bedrock a API manda o {nick} para o plugin trocar pelo nome no servidor (com o prefixo do Floodgate).
-            String p = c != null && e.bedrock && nome != null ? c.replace("{nick}", nome) : c;
+            String p = c != null && e.bedrock && nome != null ? c.replace("{nick}", jogo.nomeNoComando(nome)) : c;
             if (bloqueado(p)) {
                 jogo.aviso("Entrega " + e.id + " recusada: comando proibido: " + (p == null ? "?" : p));
                 return Resultado.falhou(e.id, "bloqueado", null);
             }
             prontos.add(semBarra(p));
         }
-        if (darKit && (jogo.versaoMc() == null || nome == null)) {
-            jogo.aviso("Entrega " + e.id + " recusada: o kit vai para o inventário do jogador, e " + (nome == null
-                    ? "a entrega não tem nick" : "o proxy não tem inventário: entregue o kit pelo plugin do servidor de jogo"));
+        if (darKit && nome == null) {
+            jogo.aviso("Entrega " + e.id + " recusada: o kit vai para o inventário do jogador, e a entrega não tem nick");
             return Resultado.falhou(e.id, "kit_incompativel", null);
         }
         // O item só entra no inventário com o jogador no servidor.
         if ((e.soOnline || darKit) && nome != null && !jogo.online(nome)) return Resultado.adiada(e.id);
-        if (darKit && !e.kit.algumExiste(jogo)) {
+        int pecas = darKit ? e.kit.existem(jogo) : 0;
+        if (darKit && pecas == 0) {
             jogo.aviso("Entrega " + e.id + " recusada: nenhum item do kit " + e.kit.nome + " existe na versão deste servidor");
+            return Resultado.falhou(e.id, "kit_incompativel", null);
+        }
+        // atalho: teto por entrega, tudo num tick. Para passar dele, dar em lotes de vários ticks (com o jogador podendo sair no meio).
+        if (darKit && pecas * e.vezes > MAX_PECAS) {
+            jogo.aviso("Entrega " + e.id + " recusada: o kit " + e.kit.nome + " sai " + e.vezes + " vezes, " + pecas * e.vezes
+                    + " itens, e o máximo numa entrega é " + MAX_PECAS + " (o servidor travaria e quase tudo cairia no chão). Nada rodou.");
             return Resultado.falhou(e.id, "kit_incompativel", null);
         }
 
@@ -250,7 +272,7 @@ final class Nucleo {
             if (!jogo.onlineMode()) return Resultado.falhou(e.id, "uuid_pirata", null);
             // O UUID do Floodgate vem do xuid (não é versão 4).
             if (e.uuid == null && e.uuidFalhou) return Resultado.falhou(e.id, "erro", null);
-            if (e.uuid == null || (!e.bedrock && e.uuid.version() != 4)) return Resultado.falhou(e.id, "nick_nao_existe", null);
+            if (e.uuid == null || (!e.bedrock && !nativo() && e.uuid.version() != 4)) return Resultado.falhou(e.id, "nick_nao_existe", null);
             for (int i = 0; i < prontos.size(); i++) prontos.set(i, prontos.get(i).replace("{uuid}", e.uuid.toString()));
         }
 
@@ -331,7 +353,7 @@ final class Nucleo {
                 "Chave: " + (c == null ? "nenhuma" : "****" + c.substring(c.length() - 4)) + " · API: " + api,
                 "Último contato: " + (ultimoContato == 0 ? "nunca" : "há " + (agora - ultimoContato) / 1000 + " s"),
                 "Esperando o jogador entrar: " + esperando.size() + " · A confirmar: " + aConfirmar(),
-                "Bedrock: " + (b == null ? "não (instale Geyser + Floodgate)" : "sim, pelo Floodgate (prefixo \"" + b.prefixo + "\")"));
+                "Bedrock: " + (nativo() ? "servidor Bedrock (o nome do jogador é o gamertag)" : b == null ? "não (instale Geyser + Floodgate)" : "sim, pelo Floodgate (prefixo \"" + b.prefixo + "\")"));
     }
 
     private void enfileirar(Resultado r) {
@@ -482,6 +504,10 @@ final class Nucleo {
 
     /** Fora da thread principal. null = nick que não serve para buscar. */
     private UUID uuidDe(Entrega e) throws Exception {
+        if (nativo()) {
+            if (!jogo.online(e.nick)) throw new IOException("no servidor Bedrock o {uuid} só sai com o jogador online");
+            return jogo.uuid(e.nick);
+        }
         if (!e.bedrock) return NICK.matcher(e.nick).matches() ? jogo.uuid(e.nick) : null;
         String nome = nomeBedrock(e.nick);
         if (nome == null) return null;

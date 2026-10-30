@@ -237,9 +237,11 @@ final class Kit {
         return new Peca(id, moderno ? 0 : it.dano, it.qtd, encs, it.nome, it.descricao);
     }
 
-    boolean algumExiste(Jogo jogo) {
-        for (Item it : itens) if (peca(jogo, it) != null) return true;
-        return false;
+    /** Quantos itens do kit existem nesta versão (o que não existe é pulado). Thread principal. */
+    int existem(Jogo jogo) {
+        int n = 0;
+        for (Item it : itens) if (peca(jogo, it) != null) n++;
+        return n;
     }
 
     /**

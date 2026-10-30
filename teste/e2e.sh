@@ -3,11 +3,17 @@
 # Uso: teste/e2e.sh <plataforma> <versão> [bedrock]
 #   paper 1.20.4 | paper 1.7.10 | folia 1.21.11 | spigot 1.21.11 (o spigot.jar do BuildTools em teste/servidores/spigot-<versão>/servidor.jar)
 #   velocity 3.5.1 | waterfall 1.21 | bungeecord latest: sobe também um Paper atrás do proxy (BACKEND=1.20.4),
-#     com o plugin do servidor e outra chave, e confere que os dois entregam juntos.
+#     com o plugin do servidor e outra chave, e confere que os dois entregam juntos. SO_PROXY=1: só o proxy (um servidor ligado).
 #   bedrock: instala o Floodgate (e o Geyser, no servidor) e entrega para um jogador Bedrock.
+#   fabric 1.20.1 | fabric 1.21.1 | fabric 26.3: o servidor pelo instalador oficial do Fabric (FABRIC_LOADER escolhe o
+#     loader), só com o NeverMiss em mods/, sem o Fabric API. Sem bedrock (o Geyser do Fabric pede o Fabric API).
+#   forge 1.12.2 | 1.16.5 | 1.18.2 | 1.19.2 | 1.20.1 e neoforge 1.20.4 | 1.21.1 | 26.3: o instalador oficial do Forge ou do
+#     NeoForge (FORGE escolhe a versão dele), com o NeverMiss em mods/. Sem bedrock. O 1.12.2 pede o Java 8.
 #   No servidor de jogo (menos o Folia), um jogador falso (teste/cliente.py) entra e recebe o Kit da NeverMiss.
 # JAVA=/caminho/do/java escolhe o Java; JAVA_BACKEND, o do Paper atrás do proxy.
 set -euo pipefail
+# O PowerNukkitX (servidor Bedrock) tem o teste dele: teste/e2e.sh powernukkitx 3.0.6
+if [ "${1:-}" = powernukkitx ]; then exec "$(dirname "$0")/e2e-nukkit.sh" "${@:2}"; fi
 
 PLATAFORMA=${1:?"Uso: teste/e2e.sh <plataforma> <versão> [bedrock]"}
 VERSAO=${2:?"Uso: teste/e2e.sh <plataforma> <versão> [bedrock]"}
@@ -32,8 +38,16 @@ case "$PLATAFORMA" in
   paper | spigot | folia) PROXY= ; JAR=bukkit ; PASTA=NeverMiss ; PRONTO='Done (' ; PARAR=stop ;;
   velocity) PROXY=1 ; JAR=velocity ; PASTA=nevermiss ; PRONTO='Done (' ; PARAR=shutdown ;;
   waterfall | bungeecord) PROXY=1 ; JAR=bungee ; PASTA=NeverMiss ; PRONTO='Listening on ' ; PARAR=end ;;
+  fabric) PROXY= ; JAR=fabric ; PASTA=nevermiss ; PRONTO='Done (' ; PARAR=stop ;;
+  forge | neoforge) PROXY= ; JAR=forge ; PASTA=nevermiss ; PRONTO='Done (' ; PARAR=stop ;;
   *) echo "Plataforma desconhecida: $PLATAFORMA"; exit 2 ;;
 esac
+# A pasta do plugin (o executadas.txt e o resgates.txt). No Fabric e no Forge é a config/nevermiss.
+if [ "$JAR" = fabric ] || [ "$JAR" = forge ]; then DADOS="$DIR/config/$PASTA"; else DADOS="$DIR/plugins/$PASTA"; fi
+if [ "$JAR" = fabric ] || [ "$JAR" = forge ] && [ -n "$BEDROCK" ]; then echo "O e2e do $PLATAFORMA não tem Bedrock"; exit 2; fi
+# O Paper atrás do proxy (sem ele com SO_PROXY=1)
+ATRAS=$PROXY
+if [ -n "${SO_PROXY:-}" ]; then ATRAS=; fi
 case "$PLATAFORMA" in paper | spigot) ESPERA=bukkit ;; waterfall | bungeecord) ESPERA=bungee ;; *) ESPERA=$PLATAFORMA ;; esac
 
 falha() {
@@ -74,6 +88,51 @@ servidorBukkit() {
   printf 'chave: "%s"\napi: "%s"\n' "$3" "$4" > "$1/plugins/NeverMiss/config.yml"
   cp "$RAIZ/bukkit/build/libs/NeverMiss-Bukkit-"*.jar "$1/plugins/"
 }
+# servidorFabric <pasta> <porta> <chave> <api> [jar]: o mesmo servidor, com o mod em mods/ e a config em config/nevermiss
+# (o Forge e o NeoForge também, com o jar deles)
+servidorFabric() {
+  rm -rf "$1/world" "$1/logs" "$1/config/nevermiss" "$1/mods/"NeverMiss-*.jar
+  mkdir -p "$1/config/nevermiss" "$1/mods"
+  echo "eula=true" > "$1/eula.txt"
+  printf 'online-mode=false\nserver-ip=127.0.0.1\nserver-port=%s\nlevel-type=flat\ngenerate-structures=false\nspawn-protection=0\nenforce-secure-profile=false\nnetwork-compression-threshold=-1\nwhite-list=false\n' "$2" > "$1/server.properties"
+  printf 'chave: "%s"\napi: "%s"\n' "$3" "$4" > "$1/config/nevermiss/config.yml"
+  cp "${5:-$(ls "$RAIZ/fabric/build/libs/NeverMiss-Fabric-"*.jar)}" "$1/mods/"
+}
+# instalarFabric <versão> <pasta>: o instalador oficial (maven.fabricmc.net, sha256 conferido) baixa o servidor da Mojang e o
+# Fabric Loader; o servidor.jar é o lançador que ele gera.
+instalarFabric() {
+  [ -f "$2/servidor.jar" ] && return 0
+  local INST LOADER URL
+  INST=$(curl -fsS https://meta.fabricmc.net/v2/versions/installer | python3 -c 'import json,sys; print(next(x["version"] for x in json.load(sys.stdin) if x["stable"]))')
+  LOADER=${FABRIC_LOADER:-$(curl -fsS https://meta.fabricmc.net/v2/versions/loader | python3 -c 'import json,sys; print(next(x["version"] for x in json.load(sys.stdin) if x["stable"]))')}
+  URL="https://maven.fabricmc.net/net/fabricmc/fabric-installer/$INST/fabric-installer-$INST.jar"
+  [ -f "$SERV/fabric-installer-$INST.jar" ] || baixar "$URL" "$(curl -fsS "$URL.sha256")" "$SERV/fabric-installer-$INST.jar"
+  nice "$JAVA" -jar "$SERV/fabric-installer-$INST.jar" server -dir "$2" -mcversion "$1" -loader "$LOADER" -downloadMinecraft
+  cp "$2/fabric-server-launch.jar" "$2/servidor.jar"
+}
+# instalarForge <forge|neoforge> <versão do jogo> <pasta>: o instalador oficial (maven do Forge ou do NeoForge, sha256
+# conferido) baixa o servidor da Mojang e as bibliotecas. FORGE escolhe a versão do carregador; sem ela, a recomendada do
+# Forge ou a mais nova do NeoForge daquela versão do jogo (o 21.1.x é o do 1.21.1). Em lancar.txt fica o jeito de ligar:
+# o jar do Forge (1.12.2 e 1.16.5) ou o arquivo de argumentos (Forge 1.17+ e NeoForge).
+instalarForge() {
+  [ -f "$3/lancar.txt" ] && return 0
+  local V URL ARGS
+  if [ "$1" = forge ]; then
+    V=${FORGE:-$(curl -fsS https://files.minecraftforge.net/net/minecraftforge/forge/promotions_slim.json |
+      python3 -c 'import json,sys; p=json.load(sys.stdin)["promos"]; print(p.get(sys.argv[1]+"-recommended") or p[sys.argv[1]+"-latest"])' "$2")}
+    URL="https://maven.minecraftforge.net/net/minecraftforge/forge/$2-$V/forge-$2-$V-installer.jar"
+  else
+    V=${FORGE:-$(curl -fsS https://maven.neoforged.net/releases/net/neoforged/neoforge/maven-metadata.xml |
+      python3 -c 'import re,sys; p=(sys.argv[1][2:] if sys.argv[1].startswith("1.") else sys.argv[1])+"."; v=[x for x in re.findall(r"<version>([^<]+)</version>", sys.stdin.read()) if x.startswith(p) and "beta" not in x]; print(max(v, key=lambda x: [int(n) for n in re.findall(r"[0-9]+", x)]))' "$2")}
+    URL="https://maven.neoforged.net/releases/net/neoforged/neoforge/$V/neoforge-$V-installer.jar"
+  fi
+  mkdir -p "$3"
+  baixar "$URL" "$(curl -fsS "$URL.sha256")" "$3/instalador.jar"
+  (cd "$3" && nice "$JAVA" -jar instalador.jar --installServer . > instalar.log 2>&1) || falha "o instalador do $1 $V falhou: $(tail -5 "$3/instalar.log")"
+  ARGS=$(cd "$3" && find libraries -name unix_args.txt | head -1)
+  if [ -n "$ARGS" ]; then echo "@$ARGS" > "$3/lancar.txt"
+  else echo "-jar $(cd "$3" && ls forge-*.jar | grep -v installer | head -1)" > "$3/lancar.txt"; fi
+}
 
 # 1) Os jars e a API falsa (o build também roda os testes).
 (cd "$RAIZ" && ./gradlew -q build)
@@ -89,6 +148,8 @@ case "$PLATAFORMA" in
     [ -f "$DIR/servidor.jar" ] || curl -fsSL -o "$DIR/servidor.jar" https://ci.md-5.net/job/BungeeCord/lastSuccessfulBuild/artifact/bootstrap/target/BungeeCord.jar
     shasum -a 256 "$DIR/servidor.jar" ;;
   spigot) [ -f "$DIR/servidor.jar" ] || falha "falta o $DIR/servidor.jar (java -jar BuildTools.jar --rev $VERSAO)" ;;
+  fabric) instalarFabric "$VERSAO" "$DIR" ;;
+  forge | neoforge) instalarForge "$PLATAFORMA" "$VERSAO" "$DIR" ;;
 esac
 # O Waterfall baixa os comandos dele (glist, alert...) da api.papermc.io/v2, que foi desligada: vão antes, da v3.
 if [ "$PLATAFORMA" = waterfall ] && [ ! -d "$DIR/modules" ]; then
@@ -106,7 +167,13 @@ fi
 
 # 3) A configuração. O proxy é original (online-mode), para o {uuid} vir da Mojang.
 rm -f "$DIR/plugins/"floodgate*.jar "$DIR/plugins/"geyser*.jar
-if [ -z "$PROXY" ]; then
+if [ "$PLATAFORMA" = fabric ]; then
+  servidorFabric "$DIR" "$PORTA_MC" "$CHAVE" "$API"
+elif [ "$JAR" = forge ]; then
+  # O Forge 1.12.2 tem o jar dele (o FML antigo); os outros e o NeoForge, o mesmo
+  if [ "$VERSAO" = 1.12.2 ]; then MODULO=forge12; else MODULO=forge; fi
+  servidorFabric "$DIR" "$PORTA_MC" "$CHAVE" "$API" "$(ls "$RAIZ/$MODULO/build/libs/NeverMiss-Forge-"*.jar)"
+elif [ -z "$PROXY" ]; then
   servidorBukkit "$DIR" "$PORTA_MC" "$CHAVE" "$API"
   if [ -n "$BEDROCK" ]; then
     baixarGeyserMC floodgate spigot "$SERV/floodgate-spigot.jar"
@@ -135,6 +202,8 @@ else
     baixarGeyserMC floodgate "$GM" "$SERV/floodgate-$GM.jar"
     cp "$SERV/floodgate-$GM.jar" "$DIR/plugins/"
   fi
+fi
+if [ -n "$ATRAS" ]; then
   # O Paper atrás do proxy (modo BungeeCord), com o plugin do servidor e outra chave.
   mkdir -p "$SERV/paper-$BACKEND" "$FUNDO/cache"
   baixarPaperMC paper "$BACKEND" "$SERV/paper-$BACKEND/servidor.jar"
@@ -144,7 +213,7 @@ else
   printf 'settings:\n  bungeecord: true\n' > "$FUNDO/spigot.yml"
 fi
 # Uma entrega que "estava rodando" quando o servidor caiu (T15).
-echo "mcinterrompida rodando $(($(date +%s) * 1000))" > "$DIR/plugins/$PASTA/executadas.txt"
+echo "mcinterrompida rodando $(($(date +%s) * 1000))" > "$DADOS/executadas.txt"
 
 # 4) Sobe a API falsa (lease 5 s, próxima consulta 10 s) e o servidor. O console de cada um é um fifo.
 PIDS=""
@@ -155,7 +224,8 @@ noLog() { grep -q -- "$1" "$DIR/saida.log"; }
 noLogDe() { grep -q -- "$2" "$1/saida.log"; }
 ligar() { # ligar <pasta> <java> <fd>
   rm -f "$1/console.fifo" && mkfifo "$1/console.fifo"
-  (cd "$1" && exec nice "$2" -Xmx1G -jar servidor.jar nogui < console.fifo > saida.log 2>&1) &
+  # O Forge 1.17+ e o NeoForge ligam por um arquivo de argumentos (o lancar.txt do instalarForge)
+  (cd "$1" && exec nice "$2" -Xmx1G $(cat lancar.txt 2>/dev/null || echo -jar servidor.jar) nogui < console.fifo > saida.log 2>&1) &
   LIGOU=$!
   PIDS="$PIDS $LIGOU"
   eval "exec $3> \"$1/console.fifo\""
@@ -164,7 +234,7 @@ esperarLigar() { # esperarLigar <pasta> <texto> <pid>
   for _ in $(seq 300); do noLogDe "$1" "$2" && return 0; kill -0 "$3" 2>/dev/null || falha "$1 não subiu"; sleep 1; done
   falha "$1 não terminou de ligar"
 }
-if [ -n "$PROXY" ]; then
+if [ -n "$ATRAS" ]; then
   nice "$JAVA" -cp "$CP" com.nevermissapps.minecraft.ApiFalsa "$((PORTA_API + 1))" "$CHAVE2" 5000 10 > "$FUNDO/api.log" 2>&1 &
   PIDS="$PIDS $!"
   ligar "$FUNDO" "$JAVA_BACKEND" 4
@@ -218,7 +288,7 @@ entrega "{\"id\":\"mcuuid\",\"nick\":\"Notch\",\"comandos\":[\"$UUID_CMD\"]}"
 entrega '{"id":"mcteste","evento":"teste","comandos":[]}'
 entrega '{"id":"mcfalha","nick":"Steve","comandos":["comandoquenaoexiste Steve"]}'
 entrega "{\"id\":\"mcbedrock\",\"nick\":\"Cool Guy\",\"edicaoJogador\":\"bedrock\",\"comandos\":[\"$BEDROCK_CMD\"]}"
-if [ -n "$PROXY" ]; then entrega '{"id":"mcfundo","nick":"Steve","comandos":["say coexiste"]}' "$API2"; fi
+if [ -n "$ATRAS" ]; then entrega '{"id":"mcfundo","nick":"Steve","comandos":["say coexiste"]}' "$API2"; fi
 
 espera mcinterrompida "falhou interrompida" 40
 espera mc1 "entregue" 40
@@ -236,8 +306,15 @@ fi
 espera mcteste "entregue" 5
 espera mcfalha "falhou comando_falhou" 5
 if [ -n "$BEDROCK" ]; then espera mcbedrock "entregue" 5; else espera mcbedrock "falhou sem_bedrock" 5; fi
-if [ -n "$PROXY" ]; then espera mcfundo "entregue" 40 "$API2"; fi
+if [ -n "$ATRAS" ]; then espera mcfundo "entregue" 40 "$API2"; fi
 echo "T13/T15/T17/T19/T21 e Bedrock: ok"
+if [ -n "$PROXY" ]; then
+  # O proxy não tem inventário: o kit que chegar a ele é recusado e nada roda.
+  entrega '{"id":"mckitproxy","nick":"Steve","comandos":[],"acoes":[{"tipo":"kit","darAgora":true,"vezes":1,"kit":{"id":"k1","nome":"K","chave":"k","equipar":true,"itens":[{"espaco":0,"item":"diamond","qtd":1}]},"resgate":{"intervaloS":30}}]}'
+  espera mckitproxy "falhou kit_incompativel" 30
+  noLog "Rodou: .*diamond" && falha "o proxy rodou o kit"
+  echo "Kit no proxy recusado: ok"
+fi
 
 # 6) Confirmação perdida 2 vezes (T14): volta pelo lease, o plugin não roda de novo.
 curl -fsS -X POST "$API/teste/cortar" >/dev/null
@@ -309,19 +386,19 @@ PY
 }
 if [ -n "$KIT" ]; then
   jogador Kiteiro 5
-  entrega "$(cat <<'JSON'
-{"id":"mckit","nick":"Kiteiro","soOnline":true,"comandos":[],"acoes":[{"tipo":"kit","darAgora":true,"vezes":1,
- "kit":{"id":"kitvip","nome":"VIP Diamante","chave":"vip-diamante","equipar":true,"itens":[
+  KITVIP=$(cat <<'JSON'
+{"id":"kitvip","nome":"VIP Diamante","chave":"vip-diamante","equipar":true,"itens":[
   {"espaco":0,"item":"diamond_sword","itemLegado":"DIAMOND_SWORD","qtd":1,"encantamentos":[{"id":"sharpness","idLegado":"DAMAGE_ALL","nivel":5}],
    "nome":"&bLâmina VIP","descricao":"Só para VIP"},
   {"espaco":1,"item":"golden_apple","itemLegado":"GOLDEN_APPLE","qtd":64,"encantamentos":[]},
   {"espaco":36,"item":"diamond_boots","itemLegado":"DIAMOND_BOOTS","qtd":1,"encantamentos":[]},
   {"espaco":37,"item":"diamond_leggings","itemLegado":"DIAMOND_LEGGINGS","qtd":1,"encantamentos":[]},
   {"espaco":38,"item":"diamond_chestplate","itemLegado":"DIAMOND_CHESTPLATE","qtd":1,"encantamentos":[]},
-  {"espaco":39,"item":"diamond_helmet","itemLegado":"DIAMOND_HELMET","qtd":1,"encantamentos":[]}]},
- "resgate":{"intervaloS":15,"ate":null}}]}
+  {"espaco":39,"item":"diamond_helmet","itemLegado":"DIAMOND_HELMET","qtd":1,"encantamentos":[]}]}
 JSON
-)"
+)
+  entrega '{"id":"mckit","nick":"Kiteiro","soOnline":true,"comandos":[],"acoes":[{"tipo":"kit","darAgora":true,"vezes":1,"kit":'"$KITVIP"',
+ "resgate":{"intervaloS":15,"ate":null}}]}'
   espera mckit "entregue" 40
   DEU=$(date +%s)
   chat Kiteiro "recebeu o kit VIP Diamante. Use /kit vip-diamante a cada 15 s" 1 10
@@ -342,8 +419,18 @@ JSON
   # A armadura do 2º kit não cabe no corpo: vai para o inventário
   inventario 128 2
   noLog "Kiteiro pegou o kit VIP Diamante (/kit, 6 itens)" || falha "o /kit não deu os 6 itens"
-  [ "$(grep -c '^mckit ' "$DIR/plugins/$PASTA/resgates.txt")" = 2 ] || falha "o resgates.txt não tem a compra e o /kit"
+  [ "$(grep -c '^mckit ' "$DADOS/resgates.txt")" = 2 ] || falha "o resgates.txt não tem a compra e o /kit"
   grep -q "CHAT .*pegou" "$DIR/Curioso.log" && falha "quem não comprou pegou o kit"
+  # Recusados sem dar nada: o kit com resgate para jogador Bedrock (o /kit dele ainda não funciona; aqui sem esperar ele
+  # entrar, que não tem Floodgate) e o kit grande demais
+  # (1000 vezes × 6 itens passa do teto de 1000 itens numa entrega).
+  entrega '{"id":"mckitbedrock","nick":"Cool Guy","edicaoJogador":"bedrock","soOnline":false,"comandos":[],"acoes":[{"tipo":"kit","darAgora":true,"vezes":1,"kit":'"$KITVIP"',"resgate":{"intervaloS":15,"ate":null}}]}'
+  entrega '{"id":"mckitgrande","nick":"Kiteiro","soOnline":true,"comandos":[],"acoes":[{"tipo":"kit","darAgora":true,"vezes":1000,"kit":'"$KITVIP"'}]}'
+  espera mckitbedrock "falhou kit_incompativel" 40
+  espera mckitgrande "falhou kit_incompativel" 40
+  noLog "ainda não funciona para jogador Bedrock. Nada rodou" || falha "o console não explicou o kit Bedrock recusado"
+  noLog "6000 itens, e o máximo numa entrega é 1000" || falha "o console não explicou o kit grande demais"
+  [ "$(grep -c 'Kit VIP Diamante para ' "$DIR/saida.log")" = 1 ] || falha "um kit recusado deu itens"
   echo "Kit e /kit: ok"
 fi
 
@@ -386,7 +473,7 @@ if [ -n "$BEDROCK" ]; then
 else
   noLog 'este servidor não aceita Bedrock: instale Geyser + Floodgate' || falha "a entrega Bedrock sem Floodgate não avisou"
 fi
-if [ -n "$PROXY" ]; then
+if [ -n "$ATRAS" ]; then
   noLogDe "$FUNDO" 'Rodou: say coexiste' || falha "o plugin do Paper atrás do proxy não entregou"
   grep -rq "$CHAVE2" "$FUNDO/saida.log" "$FUNDO/logs" 2>/dev/null && falha "a chave do Paper apareceu no log"
 fi
@@ -395,9 +482,9 @@ grep -rq "$CHAVE" "$DIR/saida.log" "$DIR/logs" 2>/dev/null && falha "a chave apa
 console "$PARAR"
 wait "$PID_MC" || true
 exec 3>&-
-if [ -n "$PROXY" ]; then
+if [ -n "$ATRAS" ]; then
   echo "stop" >&4
   wait "$PID_FUNDO" || true
   exec 4>&-
 fi
-echo "TUDO OK ($PLATAFORMA $VERSAO${BEDROCK:+ com Geyser/Floodgate}${PROXY:+ + Paper $BACKEND atrás})"
+echo "TUDO OK ($PLATAFORMA $VERSAO${BEDROCK:+ com Geyser/Floodgate}${ATRAS:+ + Paper $BACKEND atrás})"
