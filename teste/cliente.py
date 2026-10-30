@@ -6,6 +6,7 @@ Uso: python3 -I teste/cliente.py <porta> <nick> < comandos
   O servidor precisa de network-compression-threshold=-1 (sem compressão) e online-mode=false.
 Os números dos pacotes são os de cada versão testada (1.7.10, 1.8.8, 1.12.2, 1.16.5, 1.20.4, 1.21.11 e 26.3); os do 1.21.11 e do 26.3
 saíram do relatório do próprio servidor da Mojang (java -DbundlerMainClass=net.minecraft.data.Main -jar server.jar --reports).
+Os do 1.20.1 (763) e do 1.21.1 (767), para o Fabric, saíram da tabela de pacotes de cada versão e ainda não rodaram.
 """
 import hashlib
 import json
@@ -24,7 +25,9 @@ PLAY = {
     47: (0x00, 0x00, 0x02, 0x01, 0x40, None),
     340: (0x1F, 0x0B, 0x0F, 0x02, 0x1A, None),
     754: (0x1F, 0x10, 0x0E, 0x03, 0x19, None),
+    763: (0x23, 0x12, 0x64, 0x04, 0x1A, None),
     765: (0x24, 0x15, 0x69, 0x04, 0x1B, None),
+    767: (0x26, 0x18, 0x6C, 0x04, 0x1D, None),
     774: (0x2B, 0x1B, 0x77, 0x06, 0x20, 0x2B),
     777: (0x2D, 0x1C, 0x7C, 0x07, 0x20, 0x2C),
 }
@@ -32,6 +35,7 @@ PLAY = {
 # e (terminou, keep-alive, pong, pacotes conhecidos, aceitar a conduta) que saem
 CONFIG = {
     765: ((0x02, 0x03, 0x04, None, None, 0x01), (0x02, 0x03, 0x04, None, None)),
+    767: ((0x03, 0x04, 0x05, 0x0E, None, 0x02), (0x03, 0x04, 0x05, 0x07, None)),
     774: ((0x03, 0x04, 0x05, 0x0E, 0x13, 0x02), (0x03, 0x04, 0x05, 0x07, 0x09)),
     777: ((0x03, 0x04, 0x05, 0x0F, 0x14, 0x02), (0x03, 0x04, 0x05, 0x07, 0x09)),
 }
@@ -129,6 +133,8 @@ def main():
     login = texto(nick)
     if proto >= 764:
         login += uuid.UUID(bytes=hashlib.md5(("OfflinePlayer:" + nick).encode()).digest(), version=3).bytes
+    elif proto >= 761:  # 1.19.3 a 1.20.1: o UUID é opcional, e vai sem
+        login += b"\0"
     c.mandar(0x00, login)
 
     estado = "login"
@@ -170,9 +176,9 @@ def main():
             linha = linha.strip()
             if not linha:
                 continue
-            if proto >= 765:
+            if proto >= 763:
                 dados = texto(linha)
-                if proto == 765:  # 1.20.4: o comando ainda leva o carimbo da assinatura, vazio
+                if proto <= 765:  # 1.20.1 a 1.20.4: o comando ainda leva o carimbo da assinatura, vazio
                     dados += struct.pack(">qq", int(time.time() * 1000), 0) + varint(0) + varint(0) + b"\0\0\0"
                 c.mandar(cmd_out, dados)
             else:

@@ -5,6 +5,8 @@
 #   velocity 3.5.1 | waterfall 1.21 | bungeecord latest: sobe também um Paper atrás do proxy (BACKEND=1.20.4),
 #     com o plugin do servidor e outra chave, e confere que os dois entregam juntos.
 #   bedrock: instala o Floodgate (e o Geyser, no servidor) e entrega para um jogador Bedrock.
+#   fabric 1.20.1 | fabric 1.21.1 | fabric 26.3: o servidor pelo instalador oficial do Fabric (FABRIC_LOADER escolhe o
+#     loader), só com o NeverMiss em mods/, sem o Fabric API. Sem bedrock (o Geyser do Fabric pede o Fabric API).
 #   No servidor de jogo (menos o Folia), um jogador falso (teste/cliente.py) entra e recebe o Kit da NeverMiss.
 # JAVA=/caminho/do/java escolhe o Java; JAVA_BACKEND, o do Paper atrás do proxy.
 set -euo pipefail
@@ -32,8 +34,12 @@ case "$PLATAFORMA" in
   paper | spigot | folia) PROXY= ; JAR=bukkit ; PASTA=NeverMiss ; PRONTO='Done (' ; PARAR=stop ;;
   velocity) PROXY=1 ; JAR=velocity ; PASTA=nevermiss ; PRONTO='Done (' ; PARAR=shutdown ;;
   waterfall | bungeecord) PROXY=1 ; JAR=bungee ; PASTA=NeverMiss ; PRONTO='Listening on ' ; PARAR=end ;;
+  fabric) PROXY= ; JAR=fabric ; PASTA=nevermiss ; PRONTO='Done (' ; PARAR=stop ;;
   *) echo "Plataforma desconhecida: $PLATAFORMA"; exit 2 ;;
 esac
+# A pasta do plugin (o executadas.txt e o resgates.txt). No Fabric é a config/nevermiss.
+if [ "$PLATAFORMA" = fabric ]; then DADOS="$DIR/config/$PASTA"; else DADOS="$DIR/plugins/$PASTA"; fi
+if [ "$PLATAFORMA" = fabric ] && [ -n "$BEDROCK" ]; then echo "O e2e do Fabric não tem Bedrock"; exit 2; fi
 case "$PLATAFORMA" in paper | spigot) ESPERA=bukkit ;; waterfall | bungeecord) ESPERA=bungee ;; *) ESPERA=$PLATAFORMA ;; esac
 
 falha() {
@@ -74,6 +80,27 @@ servidorBukkit() {
   printf 'chave: "%s"\napi: "%s"\n' "$3" "$4" > "$1/plugins/NeverMiss/config.yml"
   cp "$RAIZ/bukkit/build/libs/NeverMiss-Bukkit-"*.jar "$1/plugins/"
 }
+# servidorFabric <pasta> <porta> <chave> <api>: o mesmo servidor, com o mod em mods/ e a config em config/nevermiss
+servidorFabric() {
+  rm -rf "$1/world" "$1/logs" "$1/config/nevermiss" "$1/mods/"NeverMiss-*.jar
+  mkdir -p "$1/config/nevermiss" "$1/mods"
+  echo "eula=true" > "$1/eula.txt"
+  printf 'online-mode=false\nserver-ip=127.0.0.1\nserver-port=%s\nlevel-type=flat\ngenerate-structures=false\nspawn-protection=0\nenforce-secure-profile=false\nnetwork-compression-threshold=-1\nwhite-list=false\n' "$2" > "$1/server.properties"
+  printf 'chave: "%s"\napi: "%s"\n' "$3" "$4" > "$1/config/nevermiss/config.yml"
+  cp "$RAIZ/fabric/build/libs/NeverMiss-Fabric-"*.jar "$1/mods/"
+}
+# instalarFabric <versão> <pasta>: o instalador oficial (maven.fabricmc.net, sha256 conferido) baixa o servidor da Mojang e o
+# Fabric Loader; o servidor.jar é o lançador que ele gera.
+instalarFabric() {
+  [ -f "$2/servidor.jar" ] && return 0
+  local INST LOADER URL
+  INST=$(curl -fsS https://meta.fabricmc.net/v2/versions/installer | python3 -c 'import json,sys; print(next(x["version"] for x in json.load(sys.stdin) if x["stable"]))')
+  LOADER=${FABRIC_LOADER:-$(curl -fsS https://meta.fabricmc.net/v2/versions/loader | python3 -c 'import json,sys; print(next(x["version"] for x in json.load(sys.stdin) if x["stable"]))')}
+  URL="https://maven.fabricmc.net/net/fabricmc/fabric-installer/$INST/fabric-installer-$INST.jar"
+  [ -f "$SERV/fabric-installer-$INST.jar" ] || baixar "$URL" "$(curl -fsS "$URL.sha256")" "$SERV/fabric-installer-$INST.jar"
+  nice "$JAVA" -jar "$SERV/fabric-installer-$INST.jar" server -dir "$2" -mcversion "$1" -loader "$LOADER" -downloadMinecraft
+  cp "$2/fabric-server-launch.jar" "$2/servidor.jar"
+}
 
 # 1) Os jars e a API falsa (o build também roda os testes).
 (cd "$RAIZ" && ./gradlew -q build)
@@ -89,6 +116,7 @@ case "$PLATAFORMA" in
     [ -f "$DIR/servidor.jar" ] || curl -fsSL -o "$DIR/servidor.jar" https://ci.md-5.net/job/BungeeCord/lastSuccessfulBuild/artifact/bootstrap/target/BungeeCord.jar
     shasum -a 256 "$DIR/servidor.jar" ;;
   spigot) [ -f "$DIR/servidor.jar" ] || falha "falta o $DIR/servidor.jar (java -jar BuildTools.jar --rev $VERSAO)" ;;
+  fabric) instalarFabric "$VERSAO" "$DIR" ;;
 esac
 # O Waterfall baixa os comandos dele (glist, alert...) da api.papermc.io/v2, que foi desligada: vão antes, da v3.
 if [ "$PLATAFORMA" = waterfall ] && [ ! -d "$DIR/modules" ]; then
@@ -106,7 +134,9 @@ fi
 
 # 3) A configuração. O proxy é original (online-mode), para o {uuid} vir da Mojang.
 rm -f "$DIR/plugins/"floodgate*.jar "$DIR/plugins/"geyser*.jar
-if [ -z "$PROXY" ]; then
+if [ "$PLATAFORMA" = fabric ]; then
+  servidorFabric "$DIR" "$PORTA_MC" "$CHAVE" "$API"
+elif [ -z "$PROXY" ]; then
   servidorBukkit "$DIR" "$PORTA_MC" "$CHAVE" "$API"
   if [ -n "$BEDROCK" ]; then
     baixarGeyserMC floodgate spigot "$SERV/floodgate-spigot.jar"
@@ -144,7 +174,7 @@ else
   printf 'settings:\n  bungeecord: true\n' > "$FUNDO/spigot.yml"
 fi
 # Uma entrega que "estava rodando" quando o servidor caiu (T15).
-echo "mcinterrompida rodando $(($(date +%s) * 1000))" > "$DIR/plugins/$PASTA/executadas.txt"
+echo "mcinterrompida rodando $(($(date +%s) * 1000))" > "$DADOS/executadas.txt"
 
 # 4) Sobe a API falsa (lease 5 s, próxima consulta 10 s) e o servidor. O console de cada um é um fifo.
 PIDS=""
@@ -342,7 +372,7 @@ JSON
   # A armadura do 2º kit não cabe no corpo: vai para o inventário
   inventario 128 2
   noLog "Kiteiro pegou o kit VIP Diamante (/kit, 6 itens)" || falha "o /kit não deu os 6 itens"
-  [ "$(grep -c '^mckit ' "$DIR/plugins/$PASTA/resgates.txt")" = 2 ] || falha "o resgates.txt não tem a compra e o /kit"
+  [ "$(grep -c '^mckit ' "$DADOS/resgates.txt")" = 2 ] || falha "o resgates.txt não tem a compra e o /kit"
   grep -q "CHAT .*pegou" "$DIR/Curioso.log" && falha "quem não comprou pegou o kit"
   echo "Kit e /kit: ok"
 fi

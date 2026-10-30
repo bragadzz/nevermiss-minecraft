@@ -1,0 +1,28 @@
+repositories {
+    maven { url = 'https://maven.fabricmc.net/' }
+    maven { url = 'https://libraries.minecraft.net/' }
+}
+
+// Sem o Minecraft e sem o Fabric API: o jogo vai por reflexão (NeverMissFabric) e os comandos pelo Brigadier,
+// que todo servidor do 1.16.5 ao 26.x traz com a mesma API. Um jar só para todas as versões.
+dependencies {
+    compileOnly('net.fabricmc:fabric-loader:0.14.25') { transitive = false }
+    compileOnly 'com.mojang:brigadier:1.0.17'
+    compileOnly 'org.apache.logging.log4j:log4j-api:2.8.1'
+    // O usercache.json do servidor (o cache de perfis), lido sem o jogo. Vai relocado, como no core.
+    implementation 'com.google.code.gson:gson:2.10.1'
+
+    testImplementation 'junit:junit:4.13.2'
+    testImplementation('net.fabricmc:fabric-loader:0.14.25') { transitive = false }
+    testImplementation 'com.mojang:brigadier:1.0.17'
+    testImplementation 'org.apache.logging.log4j:log4j-api:2.8.1'
+}
+
+processResources {
+    filteringCharset = 'UTF-8'
+    filesMatching('fabric.mod.json') { expand(version: project.version) }
+}
+
+shadowJar {
+    archiveFileName = "NeverMiss-Fabric-1.16.5-26.x-${project.version}.jar"
+}

@@ -1,0 +1,22 @@
+{
+  "schemaVersion": 1,
+  "id": "nevermiss",
+  "version": "${version}",
+  "name": "NeverMiss",
+  "description": "Entrega no servidor o que você vende pela NeverMiss. Só no servidor: o jogador não instala nada.",
+  "authors": ["NeverMiss"],
+  "contact": {
+    "homepage": "https://nevermissapps.com",
+    "sources": "https://github.com/bragadzz/nevermiss-minecraft"
+  },
+  "license": "MIT",
+  "environment": "server",
+  "entrypoints": {
+    "server": ["com.nevermissapps.minecraft.NeverMissFabric"]
+  },
+  "depends": {
+    "fabricloader": ">=0.14.0",
+    "minecraft": ">=1.16.5",
+    "java": ">=8"
+  }
+}
