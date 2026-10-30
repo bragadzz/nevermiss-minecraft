@@ -112,6 +112,7 @@ let a = await controle("/teste/estado");
 ok(a.ultimoPull.versao === "1.2.0" && igual(a.ultimoPull.recursos, ["kit"]), `versão e recursos no pull: ${JSON.stringify(a.ultimoPull)}`);
 ok(igual(a.ultimoPull.servidor, { versao: "Bedrock Dedicated Server (Script API)", onlineMode: true, plataforma: "bds", edicao: "bedrock", bedrock: null }), `servidor no pull: ${JSON.stringify(a.ultimoPull.servidor)}`);
 ok(igual(a.agentes, ["NeverMissMC/1.2.0"]), `User-Agent: ${JSON.stringify(a.agentes)}`);
+ok(igual(a.inicios, ["mc1"]), `o início antes de rodar: ${JSON.stringify(a.inicios)}`);
 ok(n.situacao === "Conectado" && n.aConfirmar() === 0, `situação: ${n.situacao}`);
 console.log("entrega: ok");
 
@@ -182,7 +183,7 @@ ok(igual((await controle("/teste/estado")).ultimoPull.online, ["Alex", "Big Alex
 ok(igual(jogo.rodados, ["give Alex diamond 1", 'give "Big Alex" diamond 1']), `só online: ${JSON.stringify(jogo.rodados)}`);
 ok((await estado("mcalex")).estado === "entregue" && (await estado("mcgtalex")).estado === "entregue", "só online não ficou entregue");
 // Saiu antes de rodar: adiada (volta para a fila sem contar tentativa).
-let r = n.executar({ id: "mcbob", nick: "Bob", soOnline: true, teste: false, bedrock: false, comandos: ["give Bob diamond 1"], kit: null });
+let r = await n.executar({ id: "mcbob", nick: "Bob", soOnline: true, teste: false, bedrock: false, comandos: ["give Bob diamond 1"], kit: null });
 ok(r.estado === "adiada" && r.comandos === null && jogo.rodados.length === 2, `adiada: ${JSON.stringify(r)}`);
 // Até 1000 nicks esperando: o que passa disso não vai.
 jogo = new JogoFalso();
@@ -207,6 +208,7 @@ ok(n.aConfirmar() === 1 && (await estado("mc2")).estado === "entregando", "a con
 await n.ciclo();
 e = await estado("mc2");
 ok(e.estado === "entregue" && e.tentativas === 2 && igual(jogo.rodados, ["give Steve diamond 1"]) && n.aConfirmar() === 0, `mc2: ${JSON.stringify(e)} ${JSON.stringify(jogo.rodados)}`);
+ok(igual((await controle("/teste/estado")).inicios, ["mc2"]), "voltou com iniciada e o registro guardado: começou de novo");
 console.log("confirmação perdida: ok");
 
 // 7) O registro no mundo: um núcleo novo (servidor reiniciado) lê o que já rodou e não roda de novo; o "rodando" sem
@@ -288,22 +290,26 @@ ok((await estado("mckitruim")).motivo === "erro", "kit fora do formato");
 ok((await estado("mcacao")).motivo === "erro" && (await estado("mcacao2")).motivo === "erro", "ação desconhecida não falhou");
 ok(Number(gk.m.get("nmr:mckit")) > 0 && !gk.m.has("nmr:mcsoresgate"), "o kit dado na compra não contou como o primeiro resgate");
 ok(jogo.mensagens.includes("Steve: §aVocê recebeu o kit VIP Diamante. Use /kit vip-diamante a cada 5 min."), `mensagem: ${JSON.stringify(jogo.mensagens)}`);
-r = n.executar({ id: "mckitfora", nick: "Bob", soOnline: false, teste: false, bedrock: false, comandos: [], kit: { darAgora: true, vezes: 1, kit: kit("6721", [espada]), resgate: null } });
+r = await n.executar({ id: "mckitfora", nick: "Bob", soOnline: false, teste: false, bedrock: false, comandos: [], kit: { darAgora: true, vezes: 1, kit: kit("6721", [espada]), resgate: null } });
 ok(r.estado === "adiada", `kit com o jogador fora: ${JSON.stringify(r)}`);
-r = n.executar({ id: "mckitsemnick", nick: null, soOnline: false, teste: false, bedrock: false, comandos: [], kit: { darAgora: true, vezes: 1, kit: kit("6721", [espada]), resgate: null } });
+r = await n.executar({ id: "mckitsemnick", nick: null, soOnline: false, teste: false, bedrock: false, comandos: [], kit: { darAgora: true, vezes: 1, kit: kit("6721", [espada]), resgate: null } });
 ok(r.motivo === "kit_incompativel", `kit sem nick: ${JSON.stringify(r)}`);
 // Nenhum item entrou: kit_incompativel, sem a mensagem de "recebeu".
 const darKit = jogo.darKit;
 jogo.darKit = () => 0;
 jogo.mensagens = [];
-r = n.executar({ id: "mckitzero", nick: "Steve", soOnline: false, teste: false, bedrock: false, comandos: [], kit: { darAgora: true, vezes: 1, kit: kit("6721", [espada]), resgate: null } });
+// Chamada direta ao executar: a entrega tem que estar saindo na API, senão o iniciar não dá 200
+await entrega("mckitzero", "Steve", [], { estado: "entregando" });
+r = await n.executar({ id: "mckitzero", nick: "Steve", soOnline: false, teste: false, bedrock: false, comandos: [], kit: { darAgora: true, vezes: 1, kit: kit("6721", [espada]), resgate: null } });
 ok(r.motivo === "kit_incompativel" && jogo.mensagens.length === 0, `kit sem nenhum item dado: ${JSON.stringify(r)} ${JSON.stringify(jogo.mensagens)}`);
 jogo.darKit = darKit;
 // O mundo não grava: nem o resgate nem o kit saem.
 const gr = guardaNova();
 const nr = new Nucleo(jogo, { ...gr, gravar: () => { throw new Error("cheio"); } }, "1.2.0");
+nr.configurar(API, true);
 jogo.kitsDados = [];
-r = nr.executar({ id: "mckitdisco", nick: "Steve", soOnline: false, teste: false, bedrock: false, comandos: ["say x"], kit: { darAgora: true, vezes: 1, kit: kit("6721", [espada]), resgate: { intervaloS: 60 } } });
+await entrega("mckitdisco", "Steve", ["say x"], { estado: "entregando" });
+r = await nr.executar({ id: "mckitdisco", nick: "Steve", soOnline: false, teste: false, bedrock: false, comandos: ["say x"], kit: { darAgora: true, vezes: 1, kit: kit("6721", [espada]), resgate: { intervaloS: 60 } } });
 ok(r.motivo === "erro" && jogo.kitsDados.length === 0 && !jogo.rodados.includes("say x"), `kit sem conseguir gravar: ${JSON.stringify(r)}`);
 console.log("kit na compra: ok");
 
@@ -365,6 +371,66 @@ for (const u of ["http://exemplo.com", "ftp://127.0.0.1", "127.0.0.1:4011", "", 
 n = await plugin(new JogoFalso());
 ok(n.status()[1] === "Chave: no secrets.json · API: http://127.0.0.1:4011", `status: ${n.status()[1]}`);
 console.log("config: ok");
+
+// 13) A queda que o mundo não gravou (o e2e achou com kill -9 no BDS): o comando rodou, o "rodando" sumiu com o mundo e a
+// confirmação não chegou. O início ficou na API: a entrega volta com iniciada e o addon não roda de novo.
+jogo = new JogoFalso();
+n = await plugin(jogo);
+await controle("/teste/cortar");
+await entrega("mcqueda", "Steve", ["scoreboard players add Steve nm 1000"]);
+await n.ciclo();
+a = await controle("/teste/estado");
+ok(igual(a.inicios, ["mcqueda"]) && a.entregas.mcqueda.iniciada && a.entregas.mcqueda.estado === "entregando", `mcqueda antes da queda: ${JSON.stringify(a.entregas.mcqueda)}`);
+n = await plugin(jogo, guardaNova(), false);
+await controle("/teste/vencer");
+await n.ciclo();
+e = await estado("mcqueda");
+ok(e.estado === "falhou" && e.motivo === "interrompida" && igual(jogo.rodados, ["scoreboard players add Steve nm 1000"]), `mcqueda: ${JSON.stringify(e)} ${JSON.stringify(jogo.rodados)}`);
+ok((await controle("/teste/estado")).inicios.length === 1, "a interrompida começou de novo");
+// O iniciar não deu 200 e a API não gravou: nada roda nem é confirmado; vencido o lease, sai de novo e roda uma vez.
+jogo = new JogoFalso();
+n = await plugin(jogo);
+await controle("/teste/ajustar", { cortarInicio: 1 });
+await entrega("mcsemini", "Steve", ["say sem inicio"]);
+await n.ciclo();
+ok(jogo.rodados.length === 0 && n.aConfirmar() === 0 && (await estado("mcsemini")).estado === "entregando", `rodou sem o início: ${JSON.stringify(jogo.rodados)}`);
+ok(jogo.logs.some((l) => l.includes("não confirmou o início (502), nada rodou")), `o motivo no console: ${JSON.stringify(jogo.logs)}`);
+await controle("/teste/vencer");
+await n.ciclo();
+ok(igual(jogo.rodados, ["say sem inicio"]) && (await estado("mcsemini")).estado === "entregue", `mcsemini: ${JSON.stringify(jogo.rodados)}`);
+// A API gravou o início e a resposta se perdeu: nada roda; a entrega volta com iniciada e fica interrompida, sem rodar.
+await controle("/teste/ajustar", { perderInicio: 1 });
+await entrega("mcperdida", "Steve", ["say resposta perdida"]);
+await n.ciclo();
+await controle("/teste/vencer");
+await n.ciclo();
+e = await estado("mcperdida");
+ok(e.estado === "falhou" && e.motivo === "interrompida" && !jogo.rodados.includes("say resposta perdida"), `mcperdida: ${JSON.stringify(e)}`);
+// O jogador saiu enquanto a API respondia o início: adiada (a API tira o início) e roda quando ele volta.
+jogo = new JogoFalso();
+jogo.jogadores.add("alex");
+const postar = jogo.post.bind(jogo);
+jogo.post = async (url, corpo) => {
+  const r = await postar(url, corpo);
+  if (url.endsWith("/fila/iniciar")) jogo.jogadores.delete("alex");
+  return r;
+};
+n = await plugin(jogo);
+await entrega("mcsaiu", "Alex", ["give Alex diamond 1"], { soOnline: true });
+await n.ciclo();
+await n.ciclo();
+e = await estado("mcsaiu");
+ok(e.estado === "pendente" && e.iniciada === false && e.tentativas === 0 && jogo.rodados.length === 0, `mcsaiu: ${JSON.stringify(e)}`);
+jogo.post = postar;
+jogo.jogadores.add("alex");
+// A primeira volta fica sabendo que ele espera (esperando); a segunda leva o nick em online e entrega
+await n.ciclo();
+await n.ciclo();
+ok(igual(jogo.rodados, ["give Alex diamond 1"]) && (await estado("mcsaiu")).estado === "entregue", `mcsaiu depois de voltar: ${JSON.stringify(jogo.rodados)}`);
+// A chave sem o "Bearer " (o secrets.json com a chave como o painel mostra) também passa.
+const semBearer = await fetch(`${API}/v1/minecraft/fila`, { method: "POST", body: JSON.stringify({ versao: "1.2.0", online: [] }), headers: { Authorization: CHAVE } });
+ok(semBearer.status === 200, `chave sem o Bearer: ${semBearer.status}`);
+console.log("queda e início na API: ok");
 
 console.log("TUDO OK");
 process.exit(0);

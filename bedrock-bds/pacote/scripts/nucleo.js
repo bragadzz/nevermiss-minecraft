@@ -9,7 +9,7 @@ export const NICK = /^[A-Za-z0-9_]{3,16}$/;
 export const GAMERTAG = /^(?=.{1,16}$)[A-Za-z][A-Za-z0-9]*(?: [A-Za-z0-9]+)*$/;
 const ID = /^[A-Za-z0-9_-]{1,64}$/;
 // A mesma lista da API; nem o painel nem a API desligam esta checagem. O EssentialsX aceita cada um com "e" na frente.
-// "allowlist" é o "whitelist" do BDS (só aqui por enquanto).
+// "allowlist" é o "whitelist" do BDS.
 const PROIBIDOS = new Set([
   "op", "deop", "stop", "restart", "reload", "rl", "ban", "ban-ip", "banip", "ipban", "tempban", "tempbanip", "tempipban",
   "pardon", "pardon-ip", "pardonip", "unban", "unbanip", "whitelist", "execute", "sudo", "plugman", "end", "shutdown",
@@ -113,9 +113,10 @@ const falhou = (id, motivo, comandos = null) => ({ id, estado: "falhou", motivo,
 const adiada = (id) => ({ id, estado: "adiada", motivo: null, comandos: null });
 
 /**
- * Os ids que já rodaram neste mundo, nas dynamic properties ("nm:<id>"): é o que garante que uma entrega nunca roda 2 vezes,
- * mesmo que a confirmação se perca. Mesmo formato do executadas.txt: "rodando <ms>" e "feita <ms> <estado> <motivo|-> <bits|->".
- * guarda = { ler(chave), gravar(chave, valor), apagar(chave), ids() }.
+ * Os ids que já rodaram neste mundo, nas dynamic properties ("nm:<id>"): com a confirmação perdida, a entrega volta e o addon
+ * só confirma o que guardou. Mesmo formato do executadas.txt: "rodando <ms>" e "feita <ms> <estado> <motivo|-> <bits|->".
+ * O BDS grava o mundo de tempos em tempos: numa queda o registro pode sumir e o efeito do comando ficar. O que segura a queda
+ * é o "iniciar" na API (ver o executar). guarda = { ler(chave), gravar(chave, valor), apagar(chave), ids() }.
  */
 export class Registro {
   constructor(guarda) {
@@ -239,7 +240,10 @@ export class Nucleo {
       this.pausado = pausa;
       this.esperando = (Array.isArray(r.json.esperando) ? r.json.esperando : []).filter((x) => typeof x === "string").slice(0, MAX_ESPERANDO);
       this.situacao = pausa ? "Entregas pausadas pela NeverMiss" : "Conectado";
-      for (const e of this.lerEntregas(r.json.entregas)) this.enfileirar(this.executar(e));
+      for (const e of this.lerEntregas(r.json.entregas)) {
+        const feito = await this.executar(e);
+        if (feito) this.enfileirar(feito);
+      }
       await this.confirmar();
       if (this.esperando.some((n) => !enviados.includes(n) && this.jogo.online(n))) return 5;
       return entre(inteiro(r.json.proximaEm, 30), 10, 300);
@@ -249,11 +253,13 @@ export class Nucleo {
     }
   }
 
-  executar(e) {
+  /** O resultado a confirmar; null = não rodou nada e não confirma (a entrega volta depois do lease). */
+  async executar(e) {
     const id = e.id;
     const guardado = this.registro.feita(id);
     if (guardado) return guardado;
-    if (this.registro.interrompida(id)) return this.gravar(falhou(id, "interrompida"));
+    // Começou e não terminou: o servidor caiu no meio. A API guarda o início mesmo quando o mundo não gravou o "rodando".
+    if (this.registro.interrompida(id) || e.iniciada) return this.gravar(falhou(id, "interrompida"));
     if (e.teste) {
       this.jogo.log("Teste do painel recebido");
       return entregue(id, []);
@@ -299,6 +305,16 @@ export class Nucleo {
       return falhou(id, "kit_incompativel");
     }
 
+    // Antes do primeiro comando a API grava que começou (o mundo do BDS pode perder o "rodando" numa queda; o Mongo, não).
+    // Sem o 200, nada roda: se a API gravou e a resposta se perdeu, a entrega volta com iniciada e fica interrompida.
+    const inicio = await this.post("/v1/minecraft/fila/iniciar", { id });
+    if (inicio.status !== 200) {
+      this.jogo.aviso(`Entrega ${id}: a NeverMiss não confirmou o início (${inicio.status || inicio.erro || "?"}), nada rodou. Fica para a próxima volta.`);
+      return null;
+    }
+    // O jogador pode ter saído enquanto a API respondia
+    if (nome !== null && (e.soOnline || darAgora) && !this.jogo.online(nome)) return adiada(id);
+
     try {
       // O kit dado na compra conta como o primeiro resgate (o id da entrega é o id do direito): o próximo /kit só sai depois do intervalo.
       if (darAgora && kit.resgate) this.resgates.marcar(id, agora());
@@ -331,7 +347,7 @@ export class Nucleo {
 
   /**
    * Manda as confirmações guardadas, 50 por vez. Se a API não responder, ficam para a próxima volta.
-   * O registro no mundo é que garante que nada roda 2 vezes.
+   * O registro no mundo e o início gravado na API é que garantem que nada roda 2 vezes.
    */
   async confirmar() {
     while (this.aConfirmarMap.size > 0 && this.temChave) {
@@ -381,7 +397,7 @@ export class Nucleo {
   erro(r) {
     switch (r.status) {
       case 401:
-        return this.parar('Chave inválida ou revogada. No secrets.json: "chave": "Bearer nmmc_..." (com o Bearer e o espaço).', 300);
+        return this.parar('Chave inválida ou revogada. No secrets.json: "chave": "nmmc_..." (a chave do painel; com "Bearer " na frente também vale).', 300);
       case 403:
         return this.parar("O adicional Minecraft não está ativo nesta loja.", 300);
       case 426:
@@ -430,6 +446,7 @@ export class Nucleo {
       entregas.push({
         acaoDesconhecida: acoes.length > (acao ? 1 : 0),
         id,
+        iniciada: o.iniciada === true,
         nick: texto(o.nick),
         soOnline: o.soOnline === true,
         teste: o.evento === "teste",

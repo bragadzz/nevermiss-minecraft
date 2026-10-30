@@ -44,6 +44,9 @@ for _ in $(seq 30); do vm "curl -fsS -X POST $API/teste/estado > /dev/null 2>&1"
 vm "curl -fsS -X POST $API/teste/estado > /dev/null" || falha "a VM não chega na API falsa pelo túnel"
 
 controle() { curl -fsS -X POST "$API$1" -d "${2-}" > /dev/null; }
+inicios() { # quantas vezes o addon chamou o iniciar da entrega
+  curl -fsS -X POST "$API/teste/estado" | node -e 'let t="";process.stdin.on("data",d=>t+=d).on("end",()=>console.log(JSON.parse(t).inicios.filter(i=>i===process.argv[1]).length))' "$1"
+}
 estado() { # "estado motivo tentativas" da entrega
   curl -fsS -X POST "$API/teste/estado" | node -e 'let t="";process.stdin.on("data",d=>t+=d).on("end",()=>{const e=JSON.parse(t).entregas[process.argv[1]]||{};console.log(`${e.estado} ${e.motivo} ${e.tentativas}`)})' "$1"
 }
@@ -87,7 +90,7 @@ vm "rm -rf ~/bds && cp -a ~/bds-original ~/bds && cd ~/bds && sed -i \
 
 # 4) A 1ª vez cria o mundo, sem o addon. Depois, o addon como o README manda: o pack no behavior_packs, o mundo com ele, o
 # server-net liberado só para o addon (o permissions.json da pasta dele; o config/default fica como veio) e a chave no
-# secrets.json (com o Bearer).
+# secrets.json como o painel mostra (sem o Bearer: a API aceita com ou sem).
 ligar 300
 desligar
 CONFIG=$(cat <<SH
@@ -97,7 +100,7 @@ mkdir -p behavior_packs/NeverMiss "config/$MODULO"
 unzip -oq /mnt/addon/build/NeverMiss-BDS-$VERSAO.mcpack -d behavior_packs/NeverMiss
 echo '[{"pack_id": "$(node -p 'require(process.argv[1]).header.uuid' "$RAIZ/pacote/manifest.json")", "version": [${VERSAO//./, }]}]' > worlds/nevermiss/world_behavior_packs.json
 echo '{"allowed_modules": ["@minecraft/server", "@minecraft/server-net", "@minecraft/server-admin"]}' > "config/$MODULO/permissions.json"
-echo '{"chave": "Bearer $CHAVE"}' > "config/$MODULO/secrets.json"
+echo '{"chave": "$CHAVE"}' > "config/$MODULO/secrets.json"
 echo '{"api": "$API"}' > "config/$MODULO/variables.json"
 SH
 )
@@ -192,8 +195,9 @@ espera mcreinicio "entregue" 60
 [ "$(quantas "[NeverMiss] Rodou: scoreboard players add Steve nm 100")" = 1 ] || falha "mcreinicio rodou de novo depois de reiniciar"
 echo "reinício sem repetir: ok"
 
-# 10) Queda (kill -9) 15 s depois de rodar, com a confirmação sem chegar. O registro fica no mundo, que o BDS grava de tempos
-# em tempos: o que o teste exige é que o placar nunca tenha a entrega 2 vezes.
+# 10) Queda (kill -9) 15 s depois de rodar, com a confirmação sem chegar. O BDS grava o mundo de tempos em tempos: o registro
+# do addon pode sumir e o placar ficar (este teste achou a entrega rodando 2 vezes assim, antes do iniciar). O início fica na
+# API: a entrega volta com iniciada e o addon não roda de novo. Ela fica interrompida, ou entregue se o mundo guardou o registro.
 controle /teste/ajustar '{"cortar":1000,"leaseMs":600000}'
 controle /teste/entregas '{"id":"mcqueda","nick":"Steve","comandos":["scoreboard players add Steve nm 1000"]}'
 esperaLog "[NeverMiss] Rodou: scoreboard players add Steve nm 1000" 30 || falha "mcqueda não rodou"
@@ -204,13 +208,23 @@ controle /teste/vencer
 ligar
 for _ in $(seq 60); do case "$(estado mcqueda)" in entregue* | falhou*) break ;; esac; sleep 1; done
 QUEDA_RODOU=$(quantas "[NeverMiss] Rodou: scoreboard players add Steve nm 1000")
+[ "$QUEDA_RODOU" = 1 ] || falha "mcqueda rodou $QUEDA_RODOU vezes no console (com as duas vidas do servidor)"
+[ "$(inicios mcqueda)" = 1 ] || falha "o addon chamou o iniciar da mcqueda $(inicios mcqueda) vezes (a que voltou com iniciada não começa de novo)"
+case "$(estado mcqueda)" in
+  "entregue "*) QUEDA="o mundo guardou o registro: entregue" ;;
+  "falhou interrompida "*) QUEDA="o mundo perdeu o registro: interrompida, sem rodar de novo" ;;
+  *) falha "mcqueda ficou '$(estado mcqueda)', esperava entregue ou falhou interrompida" ;;
+esac
 console "scoreboard players list Steve"
 console "scoreboard players list \"Some Name\""
 sleep 3
+# 1 + 10 + 100 + 1000; 111 se o mundo perdeu também o placar (a entrega fica interrompida, para o lojista reenviar). Nunca 2111.
 if noLog "nm: 1111"; then
-  [ "$QUEDA_RODOU" = 1 ] && QUEDA="o registro sobreviveu e não rodou de novo ($(estado mcqueda))" || QUEDA="o mundo voltou junto com o registro e rodou de novo, sem dobrar ($(estado mcqueda))"
+  QUEDA="$QUEDA, placar 1111"
+elif noLog "nm: 111" && [ "${QUEDA#*interrompida}" != "$QUEDA" ]; then
+  QUEDA="$QUEDA, placar 111 (o mundo perdeu o placar também)"
 else
-  falha "o placar do Steve não ficou em 1111 (1 + 10 + 100 + 1000): uma entrega rodou 2 vezes ou não rodou"
+  falha "o placar do Steve não ficou em 1111 (nem em 111 com a entrega interrompida): uma entrega rodou 2 vezes ou não rodou"
 fi
 noLog "gt: 7" || falha "o gamertag com espaço não chegou como \"Some Name\" no placar"
 echo "queda: $QUEDA"

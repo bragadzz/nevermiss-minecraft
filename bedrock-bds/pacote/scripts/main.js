@@ -147,12 +147,15 @@ const jogo = {
   },
 };
 
-/** A chave vem do secrets.json como SecretString: o addon só consegue pôr ela no cabeçalho, nunca ler nem escrever no log. */
+/**
+ * A chave vem do secrets.json como SecretString: o addon só consegue pôr ela no cabeçalho, nunca ler nem escrever no log. Vai
+ * inteira no Authorization (não dá para juntar o "Bearer " a um segredo); a NeverMiss aceita a chave com ou sem ele.
+ */
 function configurar() {
   chave = secrets.get("chave");
   const lido = variables.get("api");
   const api = validarApi(lido === undefined ? API_PADRAO : lido);
-  const erro = api === null ? 'O "api" do variables.json precisa ser https.' : chave === undefined ? 'Sem chave. Crie o secrets.json com "chave": "Bearer <chave do painel>" e reinicie o servidor.' : null;
+  const erro = api === null ? 'O "api" do variables.json precisa ser https.' : chave === undefined ? 'Sem chave. Crie o secrets.json com "chave": "<chave do painel>" e reinicie o servidor.' : null;
   nucleo.configurar(api, erro === null);
   if (erro !== null) {
     nucleo.situacao = erro;

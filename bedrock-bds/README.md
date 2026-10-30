@@ -39,10 +39,10 @@ São 6 passos com o servidor **parado**. `<mundo>` é o `level-name` do `server.
    vale para todos os addons do servidor.
 6. A chave: na mesma pasta, crie o `secrets.json` com
    ```json
-   { "chave": "Bearer nmmc_SUA_CHAVE" }
+   { "chave": "nmmc_SUA_CHAVE" }
    ```
-   Com `Bearer` e um espaço antes da chave. O BDS guarda o segredo fora do mundo e o addon só consegue pôr ele no cabeçalho da
-   chamada à NeverMiss: não tem como ler, mostrar nem mandar a chave para o log.
+   A chave como o painel mostra (com `Bearer ` na frente também vale). O BDS guarda o segredo fora do mundo e o addon só
+   consegue pôr ele no cabeçalho da chamada à NeverMiss: não tem como ler, mostrar nem mandar a chave para o log.
 
 Ligue o servidor (Windows: `bedrock_server.exe`; Linux: `LD_LIBRARY_PATH=. ./bedrock_server`). O console mostra
 `[NeverMiss] Chave no secrets.json. Primeira consulta em 5 s.` e, em até 1 minuto, o painel mostra **Conectado**.
@@ -75,11 +75,12 @@ o servidor em que outro addon já usa o `/kit`).
 - Cada entrega roda os comandos no console (`runCommand` da dimensão), na ordem, e o console mostra
   `[NeverMiss] Rodou: <comando>`. Comando que não existe, com a sintaxe errada ou que não fez nada (um `give` para quem não está
   no servidor) conta como falha.
-- **Nunca roda 2 vezes.** Antes do primeiro comando, o id da entrega fica gravado no próprio mundo (dynamic properties do
-  addon). Se a confirmação se perder, a entrega volta e o addon só confirma de novo. O BDS grava o mundo de tempos em tempos:
-  se ele cair (queda de luz, `kill`) antes de gravar, o mundo volta junto com o registro e os itens, e a entrega roda de novo
-  uma vez, sem dobrar no mundo. Comando com efeito fora do mundo (outro addon que fala com a internet) pode repetir nesse caso.
-  Trocar de mundo é começar o registro do zero.
+- **Nunca roda 2 vezes.** Antes do primeiro comando, o addon avisa a NeverMiss que começou e só roda com a resposta dela;
+  o id da entrega também fica gravado no próprio mundo (dynamic properties do addon). Se a confirmação se perder, a entrega
+  volta e o addon só confirma o que guardou. O BDS grava o mundo de tempos em tempos: se ele cair (queda de luz, `kill`) no meio, o
+  mundo pode perder o registro e ficar com o efeito do comando. A NeverMiss não perde o "começou": a entrega volta marcada, o
+  addon não roda de novo e ela fica **interrompida** no painel, para você conferir no jogo e usar **Reenviar** se não chegou.
+- **NeverMiss sem responder ao "começou":** nada roda e a entrega sai de novo em até 2 minutos.
 - **NeverMiss fora do ar:** o addon tenta de novo em 30 s, 60 s, até 5 min. O que já rodou fica guardado e é confirmado
   quando ela voltar.
 - **Só com o jogador online** (opção do produto): a entrega espera o jogador entrar e roda logo depois.
@@ -92,7 +93,7 @@ gamertag novo). É o nome que o BDS mostra.
 | Variável | Vira |
 |---|---|
 | `{nick}` | o gamertag. Com espaço, vai **entre aspas** (`give "Some Name" diamond 1`), que é como o console do Bedrock lê um nome com espaço (com `"{nick}"` no painel dá o mesmo) |
-| `{uuid}` | **não existe no BDS**: a Script API não dá o UUID nem o XUID do jogador. A entrega falha (`uuid_pirata`) e o console explica. Use `{nick}` |
+| `{uuid}` | **não existe no BDS**: a Script API não dá o UUID nem o XUID do jogador. O painel não salva `{uuid}` num servidor BDS; o produto salvo antes de o servidor conectar falha (`uuid_pirata`) e o console explica. Use `{nick}` |
 | `{quantidade}` | quantas unidades foram compradas |
 | `{pedido}` | o número do pedido |
 | `{produto}` | o nome do produto |
@@ -133,7 +134,8 @@ O kit montado no painel é dado pelo addon, sem outro addon de kit: no espaço q
 | Nada da NeverMiss ao ligar | Confira os passos 2 e 3; com `content-log-console-output-enabled=true` no `server.properties` o BDS mostra o erro do addon |
 | Erro do `@minecraft/server-net` ou do `@minecraft/server-admin` | Faltou o passo 4 (Beta APIs) ou o 5 (`permissions.json` na pasta do addon) |
 | `Sem chave` | O `secrets.json` não está em `config/4b243aaa-c498-417e-ad97-32a2c199f055/` (passo 6) |
-| `Chave inválida ou revogada` | Gere outra no painel; no `secrets.json` vai `Bearer ` antes da chave |
+| `Chave inválida ou revogada` | Gere outra no painel (**Trocar chave**), ponha no `secrets.json` e reinicie o servidor |
+| `a NeverMiss não confirmou o início` | Nada rodou. A entrega sai de novo em até 2 minutos; se repetir, confira a internet do servidor |
 | `O adicional Minecraft não está ativo nesta loja` | Contrate ou renove o adicional no painel |
 | `Atualize o addon NeverMiss` | Baixe a versão nova |
 | `o {uuid} não existe no BDS` | Troque `{uuid}` por `{nick}` no produto e use **Reenviar** |
@@ -152,15 +154,17 @@ teste/vm-apagar.sh          # apaga a VM, o Lima, os downloads e os caches
 ```
 
 - `teste/nucleo-teste.mjs`: o laço inteiro (entrega, comando proibido, gamertag, só online, até 1000 esperando, confirmação
-  perdida, registro e interrompida, `{uuid}`, kit, `/kit`, erros da API, só https) contra a `teste/api-falsa.mjs`.
+  perdida, registro e interrompida, a queda que o mundo não gravou (o início na API), o início sem resposta, `{uuid}`, kit,
+  `/kit`, erros da API, a chave sem o `Bearer`, só https) contra a `teste/api-falsa.mjs`.
 - `teste/vm-subir.sh`: o BDS só roda em Linux x86_64 e Windows. No Mac sobe um Ubuntu 24.04 arm64 no Lima 2.2.1 (vz, 2 CPUs,
   3 GB) com o Rosetta rodando o `bedrock_server` x86_64, tudo em `~/frentes-lojas/mbd-vm`, com o SHA-256 conferido. Baixar o
   BDS é aceitar a [EULA do Minecraft](https://minecraft.net/eula) e a política de privacidade da Microsoft.
 - `teste/e2e.sh`: a API falsa no Mac (só no 127.0.0.1; a VM chega por um túnel SSH reverso), o BDS na VM (UDP 19140 e 19141) e
   confere entrega, comando proibido, `{uuid}`, teste do painel, comando que falha, gamertag com espaço, jogador offline
-  esperando, `nevermiss status`/`testar` no console, confirmação perdida, reinício sem repetir, queda (`kill -9`) sem dobrar e a
-  chave fora do log. Sem cliente Bedrock ninguém entra no servidor: o que depende do jogador online (só online, kit, `/kit`)
-  fica provado pelo `teste/nucleo-teste.mjs`.
+  esperando, `nevermiss status`/`testar` no console, confirmação perdida, reinício sem repetir, queda (`kill -9`) sem rodar de
+  novo (a entrega fica interrompida, ou entregue se o mundo guardou o registro) e a chave fora do log. Sem cliente Bedrock
+  ninguém entra no servidor: o que depende do jogador online (só online, kit, `/kit`) fica provado pelo
+  `teste/nucleo-teste.mjs`.
 
 ## Licença
 
