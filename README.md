@@ -21,6 +21,7 @@ Ou monta um **Kit da NeverMiss** no painel: o plugin põe os itens no inventári
 | Velocity (proxy) | `NeverMiss-Velocity-1.2.0.jar` | 3.1.1 em diante | Velocity 3.5.1 e 4.3.1 |
 | BungeeCord e Waterfall (proxy) | `NeverMiss-Bungee-1.2.0.jar` | API do 1.16 em diante | BungeeCord build 2107 e Waterfall 1.21 |
 | Bedrock (Geyser + Floodgate) | qualquer um dos três | Floodgate 2.x | Paper 1.21.11 com Geyser 2.12.1 e Floodgate 2.2.5; Velocity e BungeeCord com Floodgate 2.2.5 |
+| PowerNukkitX (servidor Bedrock: o jar vai em `plugins/`; o `{nick}` é o gamertag, entre aspas quando tem espaço; o `{uuid}` só com o jogador online; sem o Kit da NeverMiss: entregue com comandos, como `give {nick} diamond 3`) | `NeverMiss-PowerNukkitX-3.x-1.2.0.jar` | 3.x (Java 25). O Nukkit e o Nukkit-MOT ainda não | PowerNukkitX 3.0.6, com um jogador Bedrock entrando pelo NetherNet |
 
 O Kit da NeverMiss (abaixo) foi testado com um jogador no servidor em Paper 1.7.10, 1.8.8, 1.12.2, 1.16.5, 1.20.4, 1.21.11 e 26.3, e o catálogo inteiro de itens do painel em Paper 1.8.8, 1.12.2, 1.20.4 e 1.21.11.
 

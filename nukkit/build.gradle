@@ -1,0 +1,30 @@
+repositories {
+    maven { url = 'https://repo.powernukkitx.org/releases' }
+}
+
+dependencies {
+    // Só a API do PowerNukkitX 3 (pacote org.powernukkitx), para compilar: o servidor já traz tudo.
+    compileOnly('org.powernukkitx:server:3.0.6-SNAPSHOT') { transitive = false }
+}
+
+processResources {
+    filesMatching('powernukkitx.yml') { expand(version: project.version) }
+}
+
+shadowJar {
+    archiveFileName = "NeverMiss-PowerNukkitX-3.x-${project.version}.jar"
+}
+
+// O PowerNukkitX 3 é Java 25: só o javac do JDK 25 lê a API dele. O jar sai para Java 8, como os outros.
+// Sem o JAVA25_HOME este jar não sai (os outros saem), para o build com o JDK 17 seguir funcionando.
+def jdk25 = System.getenv('JAVA25_HOME')
+if (jdk25) {
+    tasks.named('compileJava') {
+        options.fork = true
+        options.forkOptions.executable = "$jdk25/bin/javac"
+        options.compilerArgs << '-Xlint:-options'
+    }
+} else {
+    logger.warn('NeverMiss-PowerNukkitX: sem JAVA25_HOME (o caminho do JDK 25), o jar do PowerNukkitX não foi gerado.')
+    tasks.matching { it.name in ['compileJava', 'shadowJar'] }.configureEach { enabled = false }
+}

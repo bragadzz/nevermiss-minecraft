@@ -1,0 +1,15 @@
+name: NeverMiss
+version: '${version}'
+main: com.nevermissapps.minecraft.NeverMissNukkit
+api: ["3.0.0"]
+description: Entrega no servidor o que foi vendido pela NeverMiss.
+website: https://nevermissapps.com
+commands:
+  nevermiss:
+    description: Status e configuração da NeverMiss.
+    usage: /nevermiss status | testar | recarregar
+    permission: nevermiss.admin
+permissions:
+  nevermiss.admin:
+    description: Usar /nevermiss.
+    default: op

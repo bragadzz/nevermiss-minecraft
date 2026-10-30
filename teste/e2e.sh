@@ -12,6 +12,8 @@
 #   No servidor de jogo (menos o Folia), um jogador falso (teste/cliente.py) entra e recebe o Kit da NeverMiss.
 # JAVA=/caminho/do/java escolhe o Java; JAVA_BACKEND, o do Paper atrás do proxy.
 set -euo pipefail
+# O PowerNukkitX (servidor Bedrock) tem o teste dele: teste/e2e.sh powernukkitx 3.0.6
+if [ "${1:-}" = powernukkitx ]; then exec "$(dirname "$0")/e2e-nukkit.sh" "${@:2}"; fi
 
 PLATAFORMA=${1:?"Uso: teste/e2e.sh <plataforma> <versão> [bedrock]"}
 VERSAO=${2:?"Uso: teste/e2e.sh <plataforma> <versão> [bedrock]"}
