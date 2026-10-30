@@ -99,7 +99,7 @@ function plugin(JogoFalso $jogo, ?string $arquivo = null, bool $limpar = true) :
 		$pastas[] = $pasta;
 		$arquivo = "$pasta/executadas.txt";
 	}
-	$n = new Nucleo($jogo, new Registro($arquivo), "1.1.0");
+	$n = new Nucleo($jogo, new Registro($arquivo), "1.2.0");
 	$n->configurar(API, CHAVE);
 	return $n;
 }
@@ -119,10 +119,10 @@ $e = estado("mc1");
 ok($e["estado"] === "entregue" && $e["resultado"] === [true, true], "mc1: " . json_encode($e));
 $api = controle("/teste/estado");
 $servidor = $api["ultimoPull"]["servidor"];
-ok($api["ultimoPull"]["versao"] === "1.1.0", "versão do plugin no pull");
+ok($api["ultimoPull"]["versao"] === "1.2.0", "versão do plugin no pull");
 ok($servidor["plataforma"] === "pocketmine" && $servidor["edicao"] === "bedrock" && array_key_exists("bedrock", $servidor) && $servidor["bedrock"] === null, "servidor no pull: " . json_encode($servidor));
 ok($servidor["onlineMode"] === false && $servidor["versao"] === "PocketMine-MP 5.44.3 (Bedrock v1.26.30)", "versão/onlineMode no pull");
-ok($api["agentes"] === ["NeverMissMC/1.1.0"], "User-Agent: " . json_encode($api["agentes"]));
+ok($api["agentes"] === ["NeverMissMC/1.2.0"], "User-Agent: " . json_encode($api["agentes"]));
 ok($n->situacao === "Conectado" && $n->aConfirmar() === 0, "situação depois da entrega: {$n->situacao}");
 echo "entrega: ok\n";
 

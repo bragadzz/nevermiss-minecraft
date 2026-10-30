@@ -10,12 +10,12 @@ Plugin que entrega no seu servidor PocketMine-MP o que você vende pela NeverMis
 ## Instalar
 
 1. No painel da NeverMiss, em **Minecraft › Servidores**, toque em **Adicionar servidor**. A chave aparece **uma vez só**: copie.
-2. Ponha o `NeverMiss-PocketMine-1.1.0.phar` na pasta `plugins/` e ligue o servidor.
+2. Ponha o `NeverMiss-PocketMine-1.2.0.phar` na pasta `plugins/` e ligue o servidor.
 3. No console do servidor: `nevermiss chave <a chave>`.
 4. Em até 1 minuto o painel mostra **Conectado**.
 
-Confira o SHA-256 do phar antes de instalar (`shasum -a 256 NeverMiss-PocketMine-1.1.0.phar` ou
-`certutil -hashfile NeverMiss-PocketMine-1.1.0.phar SHA256`). Ele tem que bater com o que a NeverMiss publica. Se não bater, não instale.
+Confira o SHA-256 do phar antes de instalar (`shasum -a 256 NeverMiss-PocketMine-1.2.0.phar` ou
+`certutil -hashfile NeverMiss-PocketMine-1.2.0.phar SHA256`). Ele tem que bater com o que a NeverMiss publica. Se não bater, não instale.
 
 ### Onde a chave pode ficar
 
@@ -98,7 +98,7 @@ Precisa de Node 22.2 ou mais novo (o phar é montado sem PHP, sempre igual; o `.
 um clone no Windows daria outro SHA-256).
 
 ```sh
-node build.mjs           # build/NeverMiss-PocketMine-1.1.0.phar e o SHA-256
+node build.mjs           # build/NeverMiss-PocketMine-1.2.0.phar e o SHA-256
 teste/unitario.sh        # o laço contra a API falsa, sem servidor
 teste/e2e.sh             # PocketMine-MP 5 de verdade + API falsa
 ```
