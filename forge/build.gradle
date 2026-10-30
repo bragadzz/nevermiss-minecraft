@@ -30,5 +30,5 @@ processResources {
 }
 
 shadowJar {
-    archiveFileName = "NeverMiss-Forge-1.16.5-26.x-${project.version}.jar"
+    archiveFileName = "NeverMiss-Forge-1.16.5-1.20.1-NeoForge-1.20.4-26.x-${project.version}.jar"
 }

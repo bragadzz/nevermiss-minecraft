@@ -57,6 +57,7 @@ final class Forge implements Jogo {
     private static final String[] PERFIL = {"m_36316_", "func_146103_bH", "getGameProfile"};
     // O GameProfile do authlib: getName() até o 1.21.8; depois virou record, name()
     private static final String[] NOME_DO_PERFIL = {"getName", "name"};
+    private static final String[] ID_DO_PERFIL = {"getId", "id"};
     private static final String[] VERSAO_DO_CARREGADOR = {"net.minecraftforge.versions.forge.ForgeVersion",
             "net.neoforged.neoforge.common.NeoForgeVersion", "net.neoforged.neoforge.internal.versions.neoforge.NeoForgeVersion"};
 
@@ -78,6 +79,19 @@ final class Forge implements Jogo {
     private volatile Bedrock bedrock;
     private volatile Laco laco;
 
+    /**
+     * Na carga do mod. Num Forge que não tem o que o mod usa (o 1.21.6+ trocou o barramento de eventos) o servidor sobe do mesmo
+     * jeito: só avisa no console e não entrega nada, como o Fabric.
+     */
+    static void criar(String plataforma, String barramento, String eventos, File pasta) {
+        try {
+            new Forge(plataforma, barramento, eventos, pasta);
+        } catch (ReflectiveOperationException | RuntimeException | LinkageError e) {
+            LOG.error("[NeverMiss] Este " + (plataforma.equals("forge") ? "Forge" : "NeoForge") + " não tem o que o NeverMiss usa (" + e
+                    + "). Nada vai ser entregue. O jar é do Forge 1.16.5 ao 1.20.1 e do NeoForge 1.20.4 ao 26.x.");
+        }
+    }
+
     /** barramento: a classe com o EVENT_BUS do jogo; eventos: o pacote dos eventos (o do Forge ou o do NeoForge). */
     Forge(String plataforma, String barramento, String eventos, File pasta) throws ReflectiveOperationException {
         this.plataforma = plataforma;
@@ -85,14 +99,15 @@ final class Forge implements Jogo {
         Field campo = Class.forName(barramento).getField("EVENT_BUS");
         Object bus = campo.get(null);
         Method adicionar = adicionar(campo.getType());
-        ouvir(bus, adicionar, this::comandos, eventos + "RegisterCommandsEvent");
+        // Por último: o /kit de outro mod já está lá, e o da NeverMiss não se mistura com ele (ver comandos)
+        ouvir(bus, adicionar, "LOWEST", this::comandos, eventos + "RegisterCommandsEvent");
         // O evento do servidor ligado mudou de pacote no Forge 1.17 e de novo no 1.18
-        ouvir(bus, adicionar, this::ligou, eventos + "server.ServerStartedEvent",
+        ouvir(bus, adicionar, "NORMAL", this::ligou, eventos + "server.ServerStartedEvent",
                 "net.minecraftforge.fmlserverevents.FMLServerStartedEvent", "net.minecraftforge.fml.event.server.FMLServerStartedEvent");
-        ouvir(bus, adicionar, e -> desligou(), eventos + "server.ServerStoppingEvent",
+        ouvir(bus, adicionar, "NORMAL", e -> desligou(), eventos + "server.ServerStoppingEvent",
                 "net.minecraftforge.fmlserverevents.FMLServerStoppingEvent", "net.minecraftforge.fml.event.server.FMLServerStoppingEvent");
-        ouvir(bus, adicionar, e -> entrou(nome(chamar(e, "getEntity"))), eventos + "entity.player.PlayerEvent$PlayerLoggedInEvent");
-        ouvir(bus, adicionar, e -> saiu(nome(chamar(e, "getEntity"))), eventos + "entity.player.PlayerEvent$PlayerLoggedOutEvent");
+        ouvir(bus, adicionar, "NORMAL", e -> entrou(nome(chamar(e, "getEntity"))), eventos + "entity.player.PlayerEvent$PlayerLoggedInEvent");
+        ouvir(bus, adicionar, "NORMAL", e -> saiu(nome(chamar(e, "getEntity"))), eventos + "entity.player.PlayerEvent$PlayerLoggedOutEvent");
     }
 
     /** addListener(prioridade, recebe cancelados, classe do evento, tratador): o mesmo no barramento do Forge e no do NeoForge. */
@@ -105,7 +120,7 @@ final class Forge implements Jogo {
     }
 
     @SuppressWarnings({"unchecked", "rawtypes"})
-    private static void ouvir(Object bus, Method adicionar, Consumer<Object> tratador, String... classes) throws ReflectiveOperationException {
+    private static void ouvir(Object bus, Method adicionar, String prioridade, Consumer<Object> tratador, String... classes) throws ReflectiveOperationException {
         Class<?> evento = null;
         for (int i = 0; evento == null && i < classes.length; i++) {
             try {
@@ -122,7 +137,7 @@ final class Forge implements Jogo {
                 LOG.error("Erro da NeverMiss no " + e.getClass().getSimpleName(), x);
             }
         };
-        adicionar.invoke(bus, Enum.valueOf((Class) adicionar.getParameterTypes()[0], "NORMAL"), false, evento, seguro);
+        adicionar.invoke(bus, Enum.valueOf((Class) adicionar.getParameterTypes()[0], prioridade), false, evento, seguro);
     }
 
     // --- eventos ---
@@ -257,9 +272,20 @@ final class Forge implements Jogo {
         return online.contains(nick.toLowerCase(Locale.ROOT));
     }
 
-    /** Só em servidor original (o core não pergunta no pirata): a conta da Mojang, como nos proxies. */
+    /** Só em servidor original (o core não pergunta no pirata). Online, o do jogador (o do Floodgate, no Bedrock); offline, a Mojang. */
     @Override
     public UUID uuid(String nick) {
+        if (online(nick)) {
+            try {
+                UUID u = naPrincipal(() -> {
+                    Object jogador = chamar(chamar(servidor, LISTA), POR_NOME, String.class, nick);
+                    return jogador == null ? null : (UUID) chamar(chamar(jogador, PERFIL), ID_DO_PERFIL);
+                });
+                if (u != null) return u;
+            } catch (Exception saiuOuDesligando) {
+                // vai pela Mojang
+            }
+        }
         return Nucleo.uuidMojang(nick);
     }
 

@@ -64,8 +64,13 @@ public final class NeverMissForge12 implements Jogo {
         parando = false;
         e.registerServerCommand(new Comando("nevermiss", 3, (quem, args) ->
                 laco.comando(args, quem instanceof MinecraftServer, r -> responder(quem, r))));
-        // O /kit de outro mod registrado depois fica com o nome: o da NeverMiss segue no /nmkit.
+        // O registerServerCommand do 1.12 troca o comando que já tem o nome: o /kit de outro mod (registrado antes ou depois)
+        // fica com ele, e o da NeverMiss segue no /nmkit.
         for (String nome : new String[]{"kit", "nmkit"}) {
+            if (nome.equals("kit") && servidor.func_71187_D().func_71555_a().containsKey("kit")) {
+                LOG.info("O /kit já é de outro mod: o da NeverMiss fica no /nmkit.");
+                continue;
+            }
             e.registerServerCommand(new Comando(nome, 0, (quem, args) -> {
                 if (quem instanceof EntityPlayerMP) laco.kit(quem.func_70005_c_(), args, r -> responder(quem, r));
                 else quem.func_145747_a(new TextComponentString("[NeverMiss] O /" + nome + " é do jogador."));

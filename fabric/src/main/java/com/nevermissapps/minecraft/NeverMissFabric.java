@@ -290,6 +290,8 @@ public final class NeverMissFabric implements DedicatedServerModInitializer, Jog
 
     @Override
     public boolean online(String nick) {
+        // Na thread principal, a lista do próprio jogo: quem acabou de sair não espera a olhada do próximo segundo.
+        if (Thread.currentThread() == thread) return chamar(porNome, chamar(jogadores, servidor), nick) != null;
         return online.containsKey(nick.toLowerCase(Locale.ROOT));
     }
 

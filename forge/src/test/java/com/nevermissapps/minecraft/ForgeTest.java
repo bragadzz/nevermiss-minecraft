@@ -202,6 +202,13 @@ public class ForgeTest {
     }
 
     @Test
+    public void forgeSemOQueOModUsaNaoDerrubaOServidor() {
+        // O Forge 1.21.6+ trocou o barramento: o mod só avisa no console e o servidor sobe
+        Forge.criar("forge", "net.minecraftforge.common.MinecraftForge", "net.minecraftforge.event.", pasta.getRoot());
+        Forge.criar("neoforge", "net.neoforged.neoforge.common.NeoForge", "evento.que.nao.existe.", pasta.getRoot());
+    }
+
+    @Test
     public void entregaOKitEOKitDeNovoEsperaOIntervalo() throws Exception {
         api = new ApiFalsa(0, CHAVE);
         File dados = new File(pasta.getRoot(), "nevermiss");
