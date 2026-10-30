@@ -1,21 +1,27 @@
 package com.nevermissapps.minecraft;
 
 import org.bukkit.Bukkit;
+import org.bukkit.Material;
 import org.bukkit.command.Command;
 import org.bukkit.command.CommandSender;
 import org.bukkit.command.ConsoleCommandSender;
+import org.bukkit.enchantments.Enchantment;
 import org.bukkit.entity.Player;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.Listener;
 import org.bukkit.event.player.PlayerJoinEvent;
 import org.bukkit.event.player.PlayerQuitEvent;
+import org.bukkit.inventory.ItemStack;
+import org.bukkit.inventory.meta.ItemMeta;
 import org.bukkit.plugin.java.JavaPlugin;
 
 import java.io.IOException;
+import java.lang.reflect.Method;
 import java.util.Arrays;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.Locale;
+import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.Callable;
@@ -27,11 +33,24 @@ public final class NeverMiss extends JavaPlugin implements Listener, Jogo {
     private Agenda agenda;
     private Bedrock bedrock;
     private Laco laco;
+    // null no Folia: lá o kit ainda não sai (o comando do jogador tem que rodar na região dele)
+    private int[] versao;
+    private Method chaveMinecraft;
+    private Method encantamentoPorChave;
 
     @Override
     public void onEnable() {
         agenda = new Agenda(this);
         bedrock = Bedrock.detectar(getClass().getClassLoader());
+        versao = agenda.folia ? null : Kit.versao(Bukkit.getBukkitVersion());
+        try {
+            // Do 1.13 em diante: Enchantment.getByKey(NamespacedKey.minecraft(id)), que o jar do 1.8.8 não tem
+            Class<?> chave = Class.forName("org.bukkit.NamespacedKey");
+            chaveMinecraft = chave.getMethod("minecraft", String.class);
+            encantamentoPorChave = Enchantment.class.getMethod("getByKey", chave);
+        } catch (ReflectiveOperationException antigo) {
+            // antes do 1.13 o core não pergunta
+        }
         try {
             laco = new Laco(this, getDataFolder(), getDescription().getVersion());
         } catch (IOException e) {
@@ -70,11 +89,18 @@ public final class NeverMiss extends JavaPlugin implements Listener, Jogo {
     @EventHandler
     public void saiu(PlayerQuitEvent e) {
         online.remove(e.getPlayer().getName().toLowerCase(Locale.ROOT));
+        laco.saiu(e.getPlayer().getName());
     }
 
     @Override
     public boolean onCommand(CommandSender sender, Command command, String label, String[] args) {
-        laco.comando(args, sender instanceof ConsoleCommandSender, texto -> agenda.responder(sender, texto));
+        if (command.getName().equalsIgnoreCase("nevermiss")) {
+            laco.comando(args, sender instanceof ConsoleCommandSender, texto -> agenda.responder(sender, texto));
+        } else if (sender instanceof Player) {
+            laco.kit(sender.getName(), args, texto -> agenda.responder(sender, texto));
+        } else {
+            sender.sendMessage("[NeverMiss] O /" + label + " é do jogador.");
+        }
         return true;
     }
 
@@ -134,5 +160,73 @@ public final class NeverMiss extends JavaPlugin implements Listener, Jogo {
     @Override
     public Bedrock bedrock() {
         return bedrock;
+    }
+
+    // --- Kit ---
+
+    @Override
+    public int[] versaoMc() {
+        return versao;
+    }
+
+    @SuppressWarnings("deprecation")
+    @Override
+    public boolean existe(String item) {
+        if (Kit.desde(versao, 1, 13, 0)) return Material.matchMaterial(item) != null;
+        // Antes do 1.13 o id vanilla (o do comando) só se acha pelo registro do jogo
+        Material m = Bukkit.getUnsafe().getMaterialFromInternalName("minecraft:" + item);
+        return m != null && m != Material.AIR;
+    }
+
+    @Override
+    public boolean existeEncantamento(String id) {
+        if (encantamentoPorChave == null) return true;
+        try {
+            return encantamentoPorChave.invoke(null, chaveMinecraft.invoke(null, id)) != null;
+        } catch (ReflectiveOperationException e) {
+            return true;
+        }
+    }
+
+    @Override
+    public boolean vazio(String nome, int espaco) {
+        Player p = Bukkit.getPlayerExact(nome);
+        ItemStack i = p == null ? null : p.getInventory().getItem(espaco);
+        return p != null && (i == null || i.getType() == Material.AIR);
+    }
+
+    @Override
+    public boolean darPeca(String nome, Kit.Peca peca, int espaco) {
+        // "minecraft:" na frente: o /give de outro plugin (o do EssentialsX) não pega o comando.
+        if (Kit.desde(versao, 1, 9, 0)) return rodar("minecraft:" + Kit.comando(versao, nome, peca, espaco));
+        return darPelaApi(nome, peca, espaco);
+    }
+
+    /** 1.7.10 e 1.8: o item montado pela API do Bukkit (o 1.7.10 não tem o replaceitem). */
+    @SuppressWarnings("deprecation")
+    private boolean darPelaApi(String nome, Kit.Peca peca, int espaco) {
+        Player p = Bukkit.getPlayerExact(nome);
+        Material m = Bukkit.getUnsafe().getMaterialFromInternalName("minecraft:" + peca.id);
+        if (p == null || m == null || m == Material.AIR) return false;
+        ItemStack item = new ItemStack(m, peca.qtd, (short) peca.dano);
+        for (Map.Entry<String, Integer> e : peca.encantamentos.entrySet()) {
+            Enchantment en = Enchantment.getById(Integer.parseInt(e.getKey()));
+            if (en != null) item.addUnsafeEnchantment(en, e.getValue());
+        }
+        if (peca.nome != null || !peca.descricao.isEmpty()) {
+            ItemMeta meta = item.getItemMeta();
+            if (peca.nome != null) meta.setDisplayName(peca.nome);
+            if (!peca.descricao.isEmpty()) meta.setLore(peca.descricao);
+            item.setItemMeta(meta);
+        }
+        if (espaco >= 0) p.getInventory().setItem(espaco, item);
+        else for (ItemStack sobra : p.getInventory().addItem(item).values()) p.getWorld().dropItem(p.getLocation(), sobra);
+        return true;
+    }
+
+    @Override
+    public void mensagem(String nome, String texto) {
+        Player p = Bukkit.getPlayerExact(nome);
+        if (p != null) p.sendMessage(texto);
     }
 }

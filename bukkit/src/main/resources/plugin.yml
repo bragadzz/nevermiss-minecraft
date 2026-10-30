@@ -12,7 +12,18 @@ commands:
     description: Status e configuração da NeverMiss.
     usage: /nevermiss status | testar | recarregar
     permission: nevermiss.admin
+  kit:
+    description: Pega de novo um kit da NeverMiss que você comprou.
+    usage: /kit [nome do kit]
+    permission: nevermiss.kit
+  nmkit:
+    description: O /kit da NeverMiss, para o servidor que já tem outro /kit (EssentialsX).
+    usage: /nmkit [nome do kit]
+    permission: nevermiss.kit
 permissions:
   nevermiss.admin:
     description: Usar /nevermiss.
     default: op
+  nevermiss.kit:
+    description: Usar /kit e /nmkit.
+    default: true

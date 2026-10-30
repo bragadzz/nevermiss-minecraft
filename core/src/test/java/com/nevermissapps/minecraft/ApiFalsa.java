@@ -30,12 +30,17 @@ import java.util.Set;
  */
 public final class ApiFalsa implements AutoCloseable {
     private static final Set<String> MOTIVOS = new HashSet<>(Arrays.asList(
-            "comando_falhou", "bloqueado", "uuid_pirata", "nick_nao_existe", "interrompida", "erro", "sem_bedrock"));
+            "comando_falhou", "bloqueado", "uuid_pirata", "nick_nao_existe", "interrompida", "erro", "sem_bedrock",
+            "kit_incompativel"));
 
     final String chave;
     final HttpServer http;
     final Map<String, Entrega> entregas = new LinkedHashMap<>();
     final List<JsonObject> pulls = new ArrayList<>();
+    // O /kit (contrato, 17.4): o direito nasce quando a entrega do kit com resgate é confirmada
+    final List<JsonObject> direitos = new ArrayList<>();
+    final Map<String, JsonObject> kits = new LinkedHashMap<>();
+    int pedidosDeKits;
     long leaseMs = 120_000;
     long intervaloMs = 0;
     int proximaEm = 30;
@@ -48,6 +53,7 @@ public final class ApiFalsa implements AutoCloseable {
     static final class Entrega {
         String id, nick, evento = "entrega", estado = "pendente", motivo, edicaoJogador = "java";
         List<String> comandos = new ArrayList<>();
+        JsonArray acoes;
         boolean soOnline;
         long leaseAte;
         int tentativas;
@@ -101,6 +107,8 @@ public final class ApiFalsa implements AutoCloseable {
                 fila(x, corpo);
             } else if (caminho.equals("/v1/minecraft/confirmar")) {
                 confirmar(x, corpo);
+            } else if (caminho.equals("/v1/minecraft/kits")) {
+                kits(x, corpo);
             } else {
                 responder(x, 404, erro("Não existe", "rota"));
             }
@@ -154,6 +162,7 @@ public final class ApiFalsa implements AutoCloseable {
                 JsonArray cs = new JsonArray();
                 for (String c : e.comandos) cs.add(new JsonPrimitive(c));
                 o.add("comandos", cs);
+                if (e.acoes != null) o.add("acoes", e.acoes);
                 saida.add(o);
             }
         }
@@ -196,6 +205,7 @@ public final class ApiFalsa implements AutoCloseable {
                 e.motivo = "comando_falhou";
             } else if (estado.equals("entregue")) {
                 e.estado = "entregue";
+                criarDireito(e);
             } else {
                 e.estado = "falhou";
                 String m = r.has("motivo") ? r.get("motivo").getAsString() : "erro";
@@ -209,6 +219,42 @@ public final class ApiFalsa implements AutoCloseable {
         responder(x, 200, resp);
     }
 
+    private void criarDireito(Entrega e) {
+        if (e.acoes == null) return;
+        for (JsonElement a : e.acoes) {
+            JsonObject o = a.getAsJsonObject();
+            if (!o.has("resgate") || !o.get("resgate").isJsonObject()) continue;
+            JsonObject kit = o.getAsJsonObject("kit");
+            JsonObject r = o.getAsJsonObject("resgate");
+            JsonObject d = new JsonObject();
+            d.addProperty("id", e.id);
+            d.addProperty("nick", e.nick);
+            d.addProperty("kit", kit.get("id").getAsString());
+            d.add("intervaloS", r.get("intervaloS"));
+            d.add("ate", r.get("ate"));
+            direitos.add(d);
+            kits.put(kit.get("id").getAsString(), kit);
+        }
+    }
+
+    private void kits(HttpExchange x, JsonObject corpo) throws IOException {
+        pedidosDeKits++;
+        Set<String> nicks = new HashSet<>();
+        for (JsonElement n : corpo.getAsJsonArray("nicks")) nicks.add(n.getAsString().toLowerCase());
+        JsonArray ds = new JsonArray();
+        JsonObject ks = new JsonObject();
+        for (JsonObject d : direitos) {
+            if (pausado || !nicks.contains(d.get("nick").getAsString().toLowerCase())) continue;
+            ds.add(d);
+            ks.add(d.get("kit").getAsString(), kits.get(d.get("kit").getAsString()));
+        }
+        JsonObject r = new JsonObject();
+        r.add("kits", ks);
+        r.add("direitos", ds);
+        r.addProperty("pausado", pausado);
+        responder(x, 200, r);
+    }
+
     private void controle(HttpExchange x, String caminho, JsonObject corpo) throws IOException {
         if (caminho.equals("/teste/entregas")) {
             Entrega e = adicionar(corpo.get("id").getAsString(),
@@ -217,6 +263,7 @@ public final class ApiFalsa implements AutoCloseable {
             if (corpo.has("evento")) e.evento = corpo.get("evento").getAsString();
             if (corpo.has("edicaoJogador")) e.edicaoJogador = corpo.get("edicaoJogador").getAsString();
             for (JsonElement c : corpo.getAsJsonArray("comandos")) e.comandos.add(c.getAsString());
+            if (corpo.has("acoes")) e.acoes = corpo.getAsJsonArray("acoes");
             responder(x, 201, new JsonObject());
         } else if (caminho.equals("/teste/cortar")) {
             cortar++;
@@ -235,6 +282,7 @@ public final class ApiFalsa implements AutoCloseable {
             r.add("entregas", todas);
             r.addProperty("pulls", pulls.size());
             r.add("ultimoPull", pulls.isEmpty() ? null : pulls.get(pulls.size() - 1).get("servidor"));
+            r.add("recursos", pulls.isEmpty() ? null : pulls.get(pulls.size() - 1).get("recursos"));
             responder(x, 200, r);
         }
     }

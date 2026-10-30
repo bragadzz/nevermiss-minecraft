@@ -2,6 +2,7 @@
 
 Plugin que entrega no seu servidor o que você vende pela NeverMiss, no Discord e na loja do site.
 Você escreve no painel os comandos de cada produto; o plugin roda esses comandos no console quando a venda é paga.
+Ou monta um **Kit da NeverMiss** no painel: o plugin põe os itens no inventário do comprador, sem precisar de outro plugin.
 
 - Servidor de jogo (Spigot, Paper, Folia e forks) e proxy (Velocity, BungeeCord e Waterfall).
 - Jogadores Java e Bedrock (pelo Geyser + Floodgate).
@@ -12,11 +13,13 @@ Você escreve no painel os comandos de cada produto; o plugin roda esses comando
 
 | Onde | Jar | Versões | Testado em |
 |---|---|---|---|
-| Spigot, Paper e forks | `NeverMiss-Bukkit-1.1.0.jar` | 1.7.10 ao mais novo (26.x), Java 8 ou mais novo | Paper 1.7.10, 1.8.8, 1.12.2, 1.16.5, 1.20.4, 1.21.11 e 26.3 |
-| Folia | `NeverMiss-Bukkit-1.1.0.jar` (o mesmo) | 1.19.4 em diante | Folia 1.21.11 |
-| Velocity (proxy) | `NeverMiss-Velocity-1.1.0.jar` | 3.1.1 em diante | Velocity 3.5.1 e 4.3.1 |
-| BungeeCord e Waterfall (proxy) | `NeverMiss-Bungee-1.1.0.jar` | API do 1.16 em diante | BungeeCord build 2107 e Waterfall 1.21 |
+| Spigot, Paper e forks | `NeverMiss-Bukkit-1.2.0.jar` | 1.7.10 ao mais novo (26.x), Java 8 ou mais novo | Paper 1.7.10, 1.8.8, 1.12.2, 1.16.5, 1.20.4, 1.21.11 e 26.3 |
+| Folia | `NeverMiss-Bukkit-1.2.0.jar` (o mesmo) | 1.19.4 em diante | Folia 1.21.11 |
+| Velocity (proxy) | `NeverMiss-Velocity-1.2.0.jar` | 3.1.1 em diante | Velocity 3.5.1 e 4.3.1 |
+| BungeeCord e Waterfall (proxy) | `NeverMiss-Bungee-1.2.0.jar` | API do 1.16 em diante | BungeeCord build 2107 e Waterfall 1.21 |
 | Bedrock (Geyser + Floodgate) | qualquer um dos três | Floodgate 2.x | Paper 1.21.11 com Geyser 2.12.1 e Floodgate 2.2.5; Velocity e BungeeCord com Floodgate 2.2.5 |
+
+O Kit da NeverMiss (abaixo) foi testado com um jogador no servidor em Paper 1.7.10, 1.8.8, 1.12.2, 1.16.5, 1.20.4, 1.21.11 e 26.3, e o catálogo inteiro de itens do painel em Paper 1.8.8, 1.12.2, 1.20.4 e 1.21.11.
 
 O Java é o que o seu servidor já pede: o plugin roda em todos.
 
@@ -27,9 +30,9 @@ O Java é o que o seu servidor já pede: o plugin roda em todos.
 3. No console (do servidor ou do proxy): `nevermiss chave <a chave>`.
 4. Em até 1 minuto o painel mostra **Conectado**.
 
-Confira o SHA-256 do jar antes de instalar (`shasum -a 256 NeverMiss-Bukkit-1.1.0.jar` ou `certutil -hashfile NeverMiss-Bukkit-1.1.0.jar SHA256`). Ele tem que bater com o que a NeverMiss publica. Se não bater, não instale.
+Confira o SHA-256 do jar antes de instalar (`shasum -a 256 NeverMiss-Bukkit-1.2.0.jar` ou `certutil -hashfile NeverMiss-Bukkit-1.2.0.jar SHA256`). Ele tem que bater com o que a NeverMiss publica. Se não bater, não instale.
 
-Quem tem o `NeverMiss-1.0.0.jar`: apague ele e ponha o `NeverMiss-Bukkit-1.1.0.jar`. A pasta `plugins/NeverMiss` (chave e `executadas.txt`) continua a mesma.
+Quem tem o `NeverMiss-1.0.0.jar` ou o `NeverMiss-Bukkit-1.1.0.jar`: apague ele e ponha o `NeverMiss-Bukkit-1.2.0.jar`. A pasta `plugins/NeverMiss` (chave e `executadas.txt`) continua a mesma.
 
 ### Onde a chave pode ficar
 
@@ -61,6 +64,18 @@ A chave só lê e confirma as entregas **deste** servidor. Vazou? Troque no pain
 - Sem o Floodgate, a entrega para Bedrock falha (`sem_bedrock`) e o console avisa `este servidor não aceita Bedrock: instale Geyser + Floodgate`.
 - Floodgate só no proxy: o plugin do servidor não enxerga, então entregue para Bedrock pelo plugin do proxy (ou ponha o Floodgate também nos servidores).
 
+## Kit da NeverMiss
+
+No painel, em **Minecraft › Kits**, você monta o inventário (itens, quantidade, encantamentos, nome e descrição) e liga o kit na variação do produto: **Dar ao comprar** e/ou **Resgate com /kit**, a cada quanto tempo e até quando.
+
+- **Na compra:** o plugin põe cada item no espaço que você escolheu, se estiver vazio; a armadura vai direto para o corpo ("Equipar a armadura sozinho"); o que não couber vai para o inventário e o resto cai no chão, aos pés do jogador. O jogador precisa estar no servidor: a entrega espera ele entrar. Ele recebe `Você recebeu o kit VIP Diamante. Use /kit vip-diamante a cada 5 min.`
+- **`/kit <nome>`** (ou **`/nmkit <nome>`**, se o servidor já tem o `/kit` do EssentialsX): o comprador pega o kit de novo depois do intervalo, até o fim do prazo. O kit da compra conta como o primeiro. `/kit` sozinho lista os kits dele com o tempo que falta. Quem comprou duas vezes tem dois resgates, cada um com o seu intervalo. Permissão `nevermiss.kit` (todos têm).
+- O kit sai **como está no painel na hora**: editar o kit vale para as próximas entregas e resgates.
+- **Versão:** o item usa o nome de cada versão (do 1.13 em diante o moderno, `diamond_sword`; antes, o antigo). O item que não existe na versão do servidor (netherite no 1.8) é pulado; se nenhum existir, a entrega falha (`kit_incompativel`).
+- **Onde:** só no Spigot/Paper (do 1.7.10 ao 26.x). O Folia ainda não dá kit, e o proxy (Velocity, BungeeCord) não tem inventário: a NeverMiss não manda kit para eles. Jogador Bedrock (Geyser) recebe o kit da compra normalmente; o `/kit` dele ainda não funciona.
+- **Nunca dá 2 vezes:** o kit da compra segue o `executadas.txt`, como os comandos. A hora de cada `/kit` vai para o `resgates.txt` (na pasta do plugin) antes de dar os itens. Não apague esse arquivo: sem ele o intervalo zera.
+- Por dentro, o plugin dá cada item com o comando do próprio jogo (`give` e `item replace`, ou o `replaceitem` antes do 1.17, sempre como `minecraft:give`, para o `/give` de outro plugin não pegar). No 1.7.10 e no 1.8, pela API do Bukkit.
+
 ## Comandos
 
 Permissão `nevermiss.admin` (vem para op; no proxy, dê pelo plugin de permissão do proxy). O console sempre pode.
@@ -71,6 +86,7 @@ Permissão `nevermiss.admin` (vem para op; no proxy, dê pelo plugin de permiss�
 | `nevermiss testar` | Consulta a NeverMiss agora e responde se conectou |
 | `nevermiss recarregar` | Relê o `config.yml` |
 | `nevermiss chave <chave>` | Grava a chave (só no console) |
+| `kit [nome]` e `nmkit [nome]` | Do jogador, permissão `nevermiss.kit`: lista ou pega os kits da NeverMiss dele (acima) |
 
 O botão **Testar** do painel manda uma entrega de teste: o console mostra `Teste do painel recebido` e nenhum comando roda.
 
@@ -129,9 +145,9 @@ teste/e2e.sh bungeecord latest bedrock # com o Floodgate no proxy
 ```
 
 - Cada versão pede o seu Java (`JAVA=/caminho/do/java`; `JAVA_BACKEND` para o Paper atrás do proxy): o 1.16.5 vai até o Java 16, o 1.20.5+, o Folia e o Velocity 3.4+ pedem o 21, e o 26.x e o Velocity 4 pedem o 25.
-- `core/`: o laço (`Nucleo`), a config e o `/nevermiss` (`Laco`), o `executadas.txt` (`Registro`) e o Floodgate (`Bedrock`), sem servidor. `Jogo` é o que cada plataforma implementa.
-- `core/src/test/.../NucleoTest.java`: o laço inteiro contra a API falsa (`ApiFalsa.java`), sem servidor.
-- `teste/e2e.sh`: baixa o servidor da fonte oficial (PaperMC, Mojang, md_5, GeyserMC), sobe em `127.0.0.1` e confere entrega, comando proibido, `{uuid}`, teste do painel, comando que falha, entrega interrompida, confirmação perdida, a entrega Bedrock e a plataforma que vai para a API. Termina com `TUDO OK`.
+- `core/`: o laço (`Nucleo`), a config e o `/nevermiss` (`Laco`), o `executadas.txt` (`Registro`), o Floodgate (`Bedrock`), o kit e os comandos dele por versão (`Kit`), o `/kit` (`Kits`) e o `resgates.txt` (`Resgates`), sem servidor. `Jogo` é o que cada plataforma implementa.
+- `core/src/test/.../NucleoTest.java` e `KitTest.java`: o laço inteiro e o kit contra a API falsa (`ApiFalsa.java`), sem servidor, com o comando do kit de cada versão.
+- `teste/e2e.sh`: baixa o servidor da fonte oficial (PaperMC, Mojang, md_5, GeyserMC), sobe em `127.0.0.1` e confere entrega, comando proibido, `{uuid}`, teste do painel, comando que falha, entrega interrompida, confirmação perdida, a entrega Bedrock e a plataforma que vai para a API. No Spigot/Paper, um jogador falso (`teste/cliente.py`, pirata) entra e recebe um kit (armadura de diamante no corpo, espada com Afiação V e 64 maçãs douradas), que o próprio jogo confere (`data get`, ou `testfor` antes do 1.13), e usa o `/kit` com intervalo; outro jogador, que não comprou, não pega. Termina com `TUDO OK`.
 
 ## Licença
 

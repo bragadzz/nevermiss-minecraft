@@ -25,6 +25,7 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.regex.Pattern;
 
 /**
@@ -54,6 +55,9 @@ final class Nucleo {
     private final Registro registro;
     private final String versao;
     private final Map<String, Resultado> aConfirmar = new LinkedHashMap<>();
+    // Entrega de kit com resgate que rodou → nick: confirmada, o direito do /kit nasce na API.
+    private final Map<String, String> comResgate = new ConcurrentHashMap<>();
+    final Kits kits;
     private volatile String api;
     private volatile String chave;
     private volatile List<String> esperando = Collections.emptyList();
@@ -64,10 +68,11 @@ final class Nucleo {
     volatile long ultimaConsulta;
     volatile boolean pausado;
 
-    Nucleo(Jogo jogo, Registro registro, String versao) {
+    Nucleo(Jogo jogo, Registro registro, Resgates resgates, String versao) {
         this.jogo = jogo;
         this.registro = registro;
         this.versao = versao;
+        kits = new Kits(jogo, this, resgates);
         // O servidor caiu entre o "rodando" e o "feita": não roda de novo, avisa a falha.
         for (String id : registro.interrompidas()) enfileirar(gravar(Resultado.falhou(id, "interrompida", null)));
     }
@@ -195,10 +200,17 @@ final class Nucleo {
         Resultado guardado = registro.feita(e.id);
         if (guardado != null) return guardado;
         if (registro.interrompida(e.id)) return gravar(Resultado.falhou(e.id, "interrompida", null));
-        if (e.teste || e.comandos.isEmpty()) {
-            if (e.teste) jogo.log("Teste do painel recebido");
+        if (e.teste) {
+            jogo.log("Teste do painel recebido");
             return Resultado.entregue(e.id, new boolean[0]);
         }
+        if (e.acaoDesconhecida) {
+            jogo.aviso("Entrega " + e.id + " recusada: traz o que este plugin não sabe fazer. Atualize o plugin NeverMiss.");
+            return Resultado.falhou(e.id, "erro", null);
+        }
+        boolean darKit = e.kit != null && e.darAgora;
+        if (e.kit != null && e.intervaloMs > 0 && e.nick != null && !e.bedrock) comResgate.put(e.id, e.nick);
+        if (e.comandos.isEmpty() && !darKit) return Resultado.entregue(e.id, new boolean[0]);
         if (e.nick != null && !(e.bedrock ? Bedrock.GAMERTAG : NICK).matcher(e.nick).matches()) {
             jogo.aviso("Entrega " + e.id + " recusada: nick inválido");
             return Resultado.falhou(e.id, "bloqueado", null);
@@ -222,7 +234,17 @@ final class Nucleo {
             }
             prontos.add(semBarra(p));
         }
-        if (e.soOnline && nome != null && !jogo.online(nome)) return Resultado.adiada(e.id);
+        if (darKit && (jogo.versaoMc() == null || nome == null)) {
+            jogo.aviso("Entrega " + e.id + " recusada: o kit vai para o inventário do jogador, e " + (nome == null
+                    ? "a entrega não tem nick" : "o proxy não tem inventário: entregue o kit pelo plugin do servidor de jogo"));
+            return Resultado.falhou(e.id, "kit_incompativel", null);
+        }
+        // O item só entra no inventário com o jogador no servidor.
+        if ((e.soOnline || darKit) && nome != null && !jogo.online(nome)) return Resultado.adiada(e.id);
+        if (darKit && !e.kit.algumExiste(jogo)) {
+            jogo.aviso("Entrega " + e.id + " recusada: nenhum item do kit " + e.kit.nome + " existe na versão deste servidor");
+            return Resultado.falhou(e.id, "kit_incompativel", null);
+        }
 
         if (e.precisaUuid()) {
             if (!jogo.onlineMode()) return Resultado.falhou(e.id, "uuid_pirata", null);
@@ -233,9 +255,11 @@ final class Nucleo {
         }
 
         try {
+            // O kit dado na compra conta como o primeiro /kit: o próximo só sai depois do intervalo.
+            if (darKit && e.intervaloMs > 0) kits.resgates.marcar(e.id, kits.relogio.getAsLong());
             registro.marcarRodando(e.id);
         } catch (IOException x) {
-            jogo.aviso("Não consegui gravar executadas.txt, nada rodou: " + x.getMessage());
+            jogo.aviso("Não consegui gravar executadas.txt ou resgates.txt, nada rodou: " + x.getMessage());
             return Resultado.falhou(e.id, "erro", null);
         }
         boolean[] ok = new boolean[prontos.size()];
@@ -248,6 +272,13 @@ final class Nucleo {
             }
             jogo.log((ok[i] ? "Rodou: " : "Falhou: ") + prontos.get(i));
             tudo &= ok[i];
+        }
+        if (darKit) {
+            int dados = kits.dar(e.kit, nome, e.vezes);
+            jogo.log("Kit " + e.kit.nome + " para " + nome + ": " + dados + " itens");
+            if (dados == 0) return gravar(Resultado.falhou(e.id, "kit_incompativel", ok));
+            jogo.mensagem(nome, "\u00a7aVocê recebeu o kit " + e.kit.nome + "."
+                    + (e.intervaloMs > 0 ? " Use /kit " + e.kit.chave + " a cada " + Kits.tempo(e.intervaloMs) + "." : ""));
         }
         return gravar(tudo ? Resultado.entregue(e.id, ok) : Resultado.falhou(e.id, "comando_falhou", ok));
     }
@@ -277,6 +308,10 @@ final class Nucleo {
             else if (r.status != 200) return;
             synchronized (aConfirmar) {
                 for (Resultado x : lote) aConfirmar.remove(x.id, x);
+            }
+            for (Resultado x : lote) {
+                String nick = comResgate.remove(x.id);
+                if (nick != null) kits.sujar(nick);
             }
         }
     }
@@ -360,8 +395,11 @@ final class Nucleo {
         }
         JsonArray nicks = new JsonArray();
         for (String n : online) nicks.add(new JsonPrimitive(n));
+        JsonArray recursos = new JsonArray();
+        if (jogo.versaoMc() != null) recursos.add(new JsonPrimitive("kit"));
         JsonObject c = new JsonObject();
         c.addProperty("versao", versao);
+        c.add("recursos", recursos);
         c.add("servidor", servidor);
         c.add("online", nicks);
         return c;
@@ -387,12 +425,31 @@ final class Nucleo {
             if (cs != null && cs.isJsonArray()) {
                 for (JsonElement c : cs.getAsJsonArray()) e.comandos.add(c.isJsonPrimitive() ? c.getAsString() : null);
             }
+            JsonElement as = o.get("acoes");
+            if (as != null && as.isJsonArray()) for (JsonElement a : as.getAsJsonArray()) lerAcao(e, a);
             lista.add(e);
         }
         return lista;
     }
 
-    private Resposta post(String caminho, JsonObject corpo) throws IOException {
+    /** A ação "kit" (contrato, 17.3). A que este plugin não conhece faz a entrega falhar, sem rodar nada. */
+    private static void lerAcao(Entrega e, JsonElement a) {
+        JsonObject o = a.isJsonObject() ? a.getAsJsonObject() : null;
+        JsonElement k = o == null ? null : o.get("kit");
+        Kit kit = e.kit == null && "kit".equals(texto(o == null ? null : o.get("tipo"))) && k != null && k.isJsonObject()
+                ? Kit.ler(k.getAsJsonObject()) : null;
+        if (kit == null) {
+            e.acaoDesconhecida = true;
+            return;
+        }
+        e.kit = kit;
+        e.darAgora = booleano(o.get("darAgora"));
+        e.vezes = Math.max(1, Math.min(1000, inteiro(o.get("vezes"), 1)));
+        JsonElement r = o.get("resgate");
+        if (r != null && r.isJsonObject()) e.intervaloMs = Math.max(1, inteiro(r.getAsJsonObject().get("intervaloS"), 1)) * 1000L;
+    }
+
+    Resposta post(String caminho, JsonObject corpo) throws IOException {
         HttpURLConnection c = (HttpURLConnection) new URL(api + caminho).openConnection();
         c.setInstanceFollowRedirects(false);
         c.setConnectTimeout(10000);
@@ -458,15 +515,15 @@ final class Nucleo {
         }
     }
 
-    private static String texto(JsonElement el) {
+    static String texto(JsonElement el) {
         return el == null || !el.isJsonPrimitive() ? null : el.getAsString();
     }
 
-    private static boolean booleano(JsonElement el) {
+    static boolean booleano(JsonElement el) {
         return el != null && el.isJsonPrimitive() && el.getAsJsonPrimitive().isBoolean() && el.getAsBoolean();
     }
 
-    private static int inteiro(JsonElement el, int padrao) {
+    static int inteiro(JsonElement el, int padrao) {
         return inteiro(texto(el), padrao);
     }
 
@@ -499,6 +556,12 @@ final class Nucleo {
         UUID uuid;
         // A busca do UUID deu erro (não é o mesmo que "não existe").
         boolean uuidFalhou;
+        // A ação "kit": o kit, se dá agora na compra, quantas vezes e o intervalo do /kit (0 = sem resgate)
+        Kit kit;
+        boolean darAgora;
+        int vezes = 1;
+        long intervaloMs;
+        boolean acaoDesconhecida;
 
         Entrega(String id) {
             this.id = id;
@@ -510,7 +573,7 @@ final class Nucleo {
         }
     }
 
-    private static final class Resposta {
+    static final class Resposta {
         final int status;
         final JsonObject json;
         final String retryAfter;

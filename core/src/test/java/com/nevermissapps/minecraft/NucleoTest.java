@@ -49,7 +49,7 @@ public class NucleoTest {
     }
 
     private Nucleo nucleo() throws IOException {
-        Nucleo n = new Nucleo(jogo, new Registro(arquivo), "1.0.0");
+        Nucleo n = new Nucleo(jogo, new Registro(arquivo), new Resgates(new File(pasta.getRoot(), "NeverMiss/resgates.txt")), "1.0.0");
         n.configurar(api.url(), CHAVE);
         return n;
     }
@@ -489,6 +489,11 @@ public class NucleoTest {
         // A Mojang fora do ar (o uuid do proxy)
         boolean fora;
         Runnable antesDaPrincipal = () -> { };
+        // Kit: a versão do servidor (null = proxy), o que não existe nela e os espaços já ocupados do inventário
+        int[] versao;
+        final Set<String> naoExiste = new HashSet<>();
+        final Set<Integer> ocupados = new HashSet<>();
+        final List<String> mensagens = new ArrayList<>();
 
         public boolean rodar(String comando) {
             rodou.add(comando);
@@ -538,6 +543,31 @@ public class NucleoTest {
 
         public Bedrock bedrock() {
             return bedrock;
+        }
+
+        public int[] versaoMc() {
+            return versao;
+        }
+
+        public boolean existe(String item) {
+            return !naoExiste.contains(item);
+        }
+
+        public boolean existeEncantamento(String id) {
+            return !naoExiste.contains(id);
+        }
+
+        public boolean vazio(String nome, int espaco) {
+            return !ocupados.contains(espaco);
+        }
+
+        public boolean darPeca(String nome, Kit.Peca peca, int espaco) {
+            if (espaco >= 0) ocupados.add(espaco);
+            return Jogo.super.darPeca(nome, peca, espaco);
+        }
+
+        public void mensagem(String nome, String texto) {
+            mensagens.add(nome + ": " + texto);
         }
     }
 }

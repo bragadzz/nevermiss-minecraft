@@ -5,6 +5,7 @@
 #   velocity 3.5.1 | waterfall 1.21 | bungeecord latest: sobe também um Paper atrás do proxy (BACKEND=1.20.4),
 #     com o plugin do servidor e outra chave, e confere que os dois entregam juntos.
 #   bedrock: instala o Floodgate (e o Geyser, no servidor) e entrega para um jogador Bedrock.
+#   No servidor de jogo (menos o Folia), um jogador falso (teste/cliente.py) entra e recebe o Kit da NeverMiss.
 # JAVA=/caminho/do/java escolhe o Java; JAVA_BACKEND, o do Paper atrás do proxy.
 set -euo pipefail
 
@@ -25,6 +26,7 @@ API2="http://127.0.0.1:$((PORTA_API + 1))"
 CHAVE="nmmc_$(printf 'e%.0s' $(seq 43))"
 CHAVE2="nmmc_$(printf 'f%.0s' $(seq 43))"
 NOTCH=069a79f4-44e9-4726-a5be-fca90e38aaf5
+VERSAO_PLUGIN=$(sed -n "s/^ *version = '\(.*\)'/\1/p" "$RAIZ/build.gradle")
 
 case "$PLATAFORMA" in
   paper | spigot | folia) PROXY= ; JAR=bukkit ; PASTA=NeverMiss ; PRONTO='Done (' ; PARAR=stop ;;
@@ -66,7 +68,8 @@ servidorBukkit() {
   rm -rf "$1/world" "$1/world_nether" "$1/world_the_end" "$1/logs" "$1/plugins/NeverMiss" "$1/plugins/"NeverMiss-*.jar
   mkdir -p "$1/plugins/NeverMiss" "$1/plugins/bStats"
   echo "eula=true" > "$1/eula.txt"
-  printf 'online-mode=false\nserver-ip=127.0.0.1\nserver-port=%s\nlevel-type=flat\ngenerate-structures=false\nspawn-protection=0\nenforce-secure-profile=false\n' "$2" > "$1/server.properties"
+  # Sem compressão: o jogador falso não precisa do zlib. O 26.x vem com a whitelist ligada.
+  printf 'online-mode=false\nserver-ip=127.0.0.1\nserver-port=%s\nlevel-type=flat\ngenerate-structures=false\nspawn-protection=0\nenforce-secure-profile=false\nnetwork-compression-threshold=-1\nwhite-list=false\n' "$2" > "$1/server.properties"
   printf 'enabled: false\nserverUuid: 00000000-0000-0000-0000-000000000000\nlogFailedRequests: false\n' > "$1/plugins/bStats/config.yml"
   printf 'chave: "%s"\napi: "%s"\n' "$3" "$4" > "$1/plugins/NeverMiss/config.yml"
   cp "$RAIZ/bukkit/build/libs/NeverMiss-Bukkit-"*.jar "$1/plugins/"
@@ -243,6 +246,107 @@ entrega "{\"id\":\"mc2\",\"nick\":\"Steve\",\"comandos\":[\"$OK\"]}"
 espera mc2 "entregue None 2" 60
 echo "T14: ok"
 
+# 7) O Kit da NeverMiss (contrato, 17.3 e 17.4), com um jogador de verdade: a armadura de diamante no corpo, a espada com
+#    Afiação V e 64 maçãs douradas. O kit da compra conta como o 1º /kit; o próximo só sai 15 s depois. O Folia e o proxy não dão kit.
+KIT=
+if [ -z "$PROXY" ] && [ "$PLATAFORMA" != folia ]; then KIT=1; fi
+desde() { # desde <versão> <a.b.c>: a versão do servidor é essa ou mais nova
+  python3 -c 'import sys; f=lambda t: [int(x) for x in (t.split(".") + ["0", "0"])[:3]]; sys.exit(0 if f(sys.argv[1]) >= f(sys.argv[2]) else 1)' "$1" "$2"
+}
+jogador() { # jogador <nick> <fd>: entra com o cliente falso; o que for escrito no fd é comando dele
+  rm -f "$DIR/$1.fifo" && mkfifo "$DIR/$1.fifo"
+  nice python3 -I "$RAIZ/teste/cliente.py" "$PORTA_MC" "$1" < "$DIR/$1.fifo" > "$DIR/$1.log" 2>&1 &
+  PIDS="$PIDS $!"
+  eval "exec $2> \"$DIR/$1.fifo\""
+  for _ in $(seq 60); do grep -q CONECTADO "$DIR/$1.log" && return 0; grep -q SAIU "$DIR/$1.log" && break; sleep 1; done
+  falha "o jogador $1 não entrou: $(cat "$DIR/$1.log")"
+}
+chat() { # chat <nick> <texto> <vezes> <segundos>: o jogador recebeu a mensagem N vezes
+  for _ in $(seq "$4"); do [ "$(grep -c -- "CHAT .*$2" "$DIR/$1.log")" -ge "$3" ] && return 0; sleep 1; done
+  falha "$1 não recebeu '$2' ($3 vez(es)): $(tail -5 "$DIR/$1.log")"
+}
+# inventario <maçãs> <capacetes>: o que o Kiteiro tem, pelo próprio jogo (data get no 1.13+, testfor antes).
+# O 1.7.10 não tem o testfor com NBT nem o clear que só conta: lá a prova é o log do plugin e a mensagem ao jogador.
+inventario() {
+  if [ "$VERSAO" = 1.7.10 ]; then echo "1.7.10: o inventário não é conferido pelo jogo"; return 0; fi
+  : > "$DIR/inventario.txt"
+  MARCA=$(wc -l < "$DIR/saida.log")
+  if antigo "$VERSAO"; then
+    console 'testfor Kiteiro {Inventory:[{Slot:103b,id:"minecraft:diamond_helmet"},{Slot:102b,id:"minecraft:diamond_chestplate"},{Slot:101b,id:"minecraft:diamond_leggings"},{Slot:100b,id:"minecraft:diamond_boots"},{Slot:0b,id:"minecraft:diamond_sword",tag:{ench:[{id:16s,lvl:5s}]}},{Slot:1b,id:"minecraft:golden_apple",Count:64b}]}'
+    console "clear Kiteiro minecraft:golden_apple -1 0"
+    console "clear Kiteiro minecraft:diamond_helmet -1 0"
+  else
+    console "data get entity Kiteiro Inventory"
+    if desde "$VERSAO" 1.21.5; then console "data get entity Kiteiro equipment"; fi
+    console "clear Kiteiro minecraft:golden_apple 0"
+    console "clear Kiteiro minecraft:diamond_helmet 0"
+  fi
+  sleep 3
+  tail -n +"$((MARCA + 1))" "$DIR/saida.log" > "$DIR/inventario.txt"
+  python3 - "$DIR/inventario.txt" "$VERSAO" "$1" "$2" <<'PY' || falha "o inventário do Kiteiro não bate: $(cat "$DIR/inventario.txt")"
+import re, sys
+log, versao, macas, capacetes = open(sys.argv[1], encoding="utf-8", errors="replace").read(), sys.argv[2], sys.argv[3], sys.argv[4]
+v = [int(x) for x in (versao.split(".") + ["0"])[:3]]
+def tem(padrao):
+    assert re.search(padrao, log, re.S), padrao
+if v < [1, 13, 0]:
+    tem(r"Found Kiteiro")
+    tem(r"Kiteiro has %s items" % macas)
+    tem(r"Kiteiro has %s items" % capacetes)
+else:
+    if v < [1, 21, 5]:
+        for slot, peca in ((100, "boots"), (101, "leggings"), (102, "chestplate"), (103, "helmet")):
+            tem(r'Slot: %db, id: "minecraft:diamond_%s"' % (slot, peca))
+        tem(r'Slot: 0b, id: "minecraft:diamond_sword"')
+    else:
+        for slot, peca in (("feet", "boots"), ("legs", "leggings"), ("chest", "chestplate"), ("head", "helmet")):
+            tem(r'%s: \{[^}]*id: "minecraft:diamond_%s"' % (slot, peca))
+    tem(r'"minecraft:sharpness"' + (r"\W+5" if v >= [1, 20, 5] else r", lvl: 5s"))
+    tem(r"mina VIP")
+    tem(r"Found %s matching item.{0,4} on player Kiteiro" % macas)
+    tem(r"Found %s matching item.{0,4} on player Kiteiro" % capacetes)
+PY
+}
+if [ -n "$KIT" ]; then
+  jogador Kiteiro 5
+  entrega "$(cat <<'JSON'
+{"id":"mckit","nick":"Kiteiro","soOnline":true,"comandos":[],"acoes":[{"tipo":"kit","darAgora":true,"vezes":1,
+ "kit":{"id":"kitvip","nome":"VIP Diamante","chave":"vip-diamante","equipar":true,"itens":[
+  {"espaco":0,"item":"diamond_sword","itemLegado":"DIAMOND_SWORD","qtd":1,"encantamentos":[{"id":"sharpness","idLegado":"DAMAGE_ALL","nivel":5}],
+   "nome":"&bLâmina VIP","descricao":"Só para VIP"},
+  {"espaco":1,"item":"golden_apple","itemLegado":"GOLDEN_APPLE","qtd":64,"encantamentos":[]},
+  {"espaco":36,"item":"diamond_boots","itemLegado":"DIAMOND_BOOTS","qtd":1,"encantamentos":[]},
+  {"espaco":37,"item":"diamond_leggings","itemLegado":"DIAMOND_LEGGINGS","qtd":1,"encantamentos":[]},
+  {"espaco":38,"item":"diamond_chestplate","itemLegado":"DIAMOND_CHESTPLATE","qtd":1,"encantamentos":[]},
+  {"espaco":39,"item":"diamond_helmet","itemLegado":"DIAMOND_HELMET","qtd":1,"encantamentos":[]}]},
+ "resgate":{"intervaloS":15,"ate":null}}]}
+JSON
+)"
+  espera mckit "entregue" 40
+  DEU=$(date +%s)
+  chat Kiteiro "recebeu o kit VIP Diamante. Use /kit vip-diamante a cada 15 s" 1 10
+  inventario 64 1
+  echo "kit vip-diamante" >&5
+  chat Kiteiro "Espere .* para pegar o kit VIP Diamante de novo" 1 10
+  echo "kit" >&5
+  chat Kiteiro "Seus kits: vip-diamante (em " 1 10
+  jogador Curioso 6
+  echo "kit vip-diamante" >&6
+  chat Curioso "o tem esse kit" 1 10
+  FALTA=$((DEU + 16 - $(date +%s)))
+  [ "$FALTA" -gt 0 ] && sleep "$FALTA"
+  echo "nmkit vip-diamante" >&5
+  chat Kiteiro "pegou o kit VIP Diamante" 1 10
+  echo "kit vip-diamante" >&5
+  chat Kiteiro "Espere .* para pegar o kit VIP Diamante de novo" 2 10
+  # A armadura do 2º kit não cabe no corpo: vai para o inventário
+  inventario 128 2
+  noLog "Kiteiro pegou o kit VIP Diamante (/kit, 6 itens)" || falha "o /kit não deu os 6 itens"
+  [ "$(grep -c '^mckit ' "$DIR/plugins/$PASTA/resgates.txt")" = 2 ] || falha "o resgates.txt não tem a compra e o /kit"
+  grep -q "CHAT .*pegou" "$DIR/Curioso.log" && falha "quem não comprou pegou o kit"
+  echo "Kit e /kit: ok"
+fi
+
 console "nevermiss status"
 console "nevermiss testar"
 if [ -z "$PROXY" ] && [ "$PLATAFORMA" != folia ]; then
@@ -260,15 +364,18 @@ noLog 'Teste do painel recebido' || falha "teste do painel não apareceu"
 noLog "Rodou: $BLOQ" && falha "comando de entrega bloqueada rodou"
 noLog 'Rodou: .*Interrompido' && falha "a entrega interrompida rodou"
 noLog '\[NeverMiss\] Conectado' || falha "/nevermiss testar não respondeu"
-noLog "NeverMiss 1.1.0 ($ESPERA)" || falha "/nevermiss status não mostrou a plataforma $ESPERA"
+noLog "NeverMiss $VERSAO_PLUGIN ($ESPERA)" || falha "/nevermiss status não mostrou a plataforma $ESPERA"
 if [ -n "$PROXY" ]; then noLog "Rodou: glist $NOTCH" || falha "o {uuid} do proxy não veio da Mojang"; fi
 
 # O que o plugin manda para a API: plataforma, edição e o Floodgate.
 PULL=$(curl -fsS "$API/teste/estado" | python3 -c 'import json,sys; print(json.dumps(json.load(sys.stdin)["ultimoPull"], sort_keys=True))')
 echo "Servidor no pull: $PULL"
-python3 - "$PULL" "$ESPERA" "$BEDROCK" "$PROXY" <<'PY' || falha "o pull não traz a plataforma, a edição ou o bedrock certos"
+RECURSOS=$(curl -fsS "$API/teste/estado" | python3 -c 'import json,sys; print(json.dumps(json.load(sys.stdin)["recursos"]))')
+echo "Recursos no pull: $RECURSOS"
+python3 - "$PULL" "$ESPERA" "$BEDROCK" "$PROXY" "$RECURSOS" "$KIT" <<'PY' || falha "o pull não traz a plataforma, a edição, o bedrock ou os recursos certos"
 import json, sys
 p, plataforma, bedrock, proxy = json.loads(sys.argv[1]), sys.argv[2], sys.argv[3], sys.argv[4]
+assert json.loads(sys.argv[5]) == (["kit"] if sys.argv[6] else []), sys.argv[5]
 assert p["plataforma"] == plataforma and p["edicao"] == "java", p
 assert p["bedrock"] == ({"floodgate": True, "prefixo": "."} if bedrock else None), p
 assert p["onlineMode"] == bool(proxy), p

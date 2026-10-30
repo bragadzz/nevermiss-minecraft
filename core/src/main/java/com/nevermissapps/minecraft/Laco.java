@@ -20,6 +20,7 @@ final class Laco {
     private final Jogo jogo;
     private final File config;
     private final Registro registro;
+    private final Resgates resgates;
     final Nucleo nucleo;
     private final AtomicBoolean emCiclo = new AtomicBoolean();
     private volatile boolean deNovo;
@@ -30,7 +31,8 @@ final class Laco {
     Laco(Jogo jogo, File pasta, String versao) throws IOException {
         this.jogo = jogo;
         registro = new Registro(new File(pasta, "executadas.txt"));
-        nucleo = new Nucleo(jogo, registro, versao);
+        resgates = new Resgates(new File(pasta, "resgates.txt"));
+        nucleo = new Nucleo(jogo, registro, resgates, versao);
         config = new File(pasta, "config.yml");
         if (!config.exists()) {
             // Ao lado da classe, não na raiz: o loader do Velocity e do BungeeCord procura primeiro no proxy.
@@ -81,11 +83,22 @@ final class Laco {
         ligado = false;
         cancelar();
         registro.fechar();
+        resgates.fechar();
     }
 
     /** Um jogador entrou: se há entrega esperando por ele, adianta a consulta. */
     void entrou(String nick) {
         if (nucleo.configurado() && nucleo.aoEntrar(nick)) adiantar();
+        nucleo.kits.aoEntrar(nick);
+    }
+
+    void saiu(String nick) {
+        nucleo.kits.aoSair(nick);
+    }
+
+    /** /kit e /nmkit de um jogador. O responder pode ser chamado de outra thread. */
+    void kit(String nome, String[] args, Consumer<String> responder) {
+        nucleo.kits.comando(nome, args, responder);
     }
 
     /** /nevermiss. console = quem mandou é o console (só ele troca a chave). O responder pode ser chamado de outra thread. */
