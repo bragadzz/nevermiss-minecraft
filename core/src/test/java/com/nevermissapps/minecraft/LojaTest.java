@@ -61,6 +61,7 @@ public class LojaTest {
         assertFalse(chaves.esgotado());
         assertEquals(4.5, chaves.menor(), 0.001);
         assertSame(c, loja.catalogo());
+        assertTrue(c.fora.isEmpty());
     }
 
     @Test
@@ -82,6 +83,7 @@ public class LojaTest {
         api.pedidosLoja.get(p.numero).addProperty("status", "pago");
         Loja.Pedido pago = loja.status(p.numero);
         assertEquals("pago", pago.status);
+        assertTrue(pago.mensagem.isEmpty());
         assertEquals(0, pago.tamanho);
     }
 

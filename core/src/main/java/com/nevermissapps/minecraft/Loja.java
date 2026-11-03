@@ -46,6 +46,8 @@ final class Loja {
         final int restam;
         final boolean gratis;
         final boolean bedrock;
+        // Entregue pela equipe depois do Pix (entrega manual)
+        final boolean equipe;
         final Kit.Item icone;
         // O desconto por quantidade do produto: pct% a partir de N unidades (0 = sem)
         final int descontoAPartirDe;
@@ -63,6 +65,7 @@ final class Loja {
             restam = Nucleo.inteiro(o.get("restam"), -1);
             gratis = Nucleo.booleano(o.get("gratis"));
             bedrock = Nucleo.booleano(o.get("bedrock"));
+            equipe = Nucleo.booleano(o.get("equipe"));
             icone = icone(o.get("icone"));
             JsonElement d = o.get("desconto");
             JsonObject dd = d != null && d.isJsonObject() ? d.getAsJsonObject() : new JsonObject();
@@ -122,12 +125,15 @@ final class Loja {
         final String motivo;
         final String nome;
         final List<Produto> produtos;
+        // O que entrega neste servidor e ficou fora ("Vip Mensal: Dá cargo no Discord"), para o op entender a /loja vazia
+        final List<String> fora;
 
-        Catalogo(boolean aberta, String motivo, String nome, List<Produto> produtos) {
+        Catalogo(boolean aberta, String motivo, String nome, List<Produto> produtos, List<String> fora) {
             this.aberta = aberta;
             this.motivo = motivo;
             this.nome = nome;
             this.produtos = produtos;
+            this.fora = fora;
         }
     }
 
@@ -137,11 +143,15 @@ final class Loja {
         final String status;
         final double total;
         final boolean gratis;
+        // Pago, mas a equipe é que entrega (entrega manual)
+        final boolean equipe;
         final long expiraEm;
         final String copiaCola;
         final String recebedor;
         // O que dizer ao jogador quando o pedido não vai ser entregue (cancelado, reembolsado, esgotou depois de pagar)
         final String aviso;
+        // A mensagem de entrega do produto (o texto do estoque infinito, o link), depois de pago: vai para o chat
+        final List<String> mensagem;
         // O QR (tamanho × tamanho módulos), bit a bit em linhas. null fora do "aguardando"
         final int tamanho;
         private final byte[] modulos;
@@ -151,10 +161,20 @@ final class Loja {
             status = Nucleo.texto(o.get("status"));
             total = numero(o.get("total"));
             gratis = Nucleo.booleano(o.get("gratis"));
+            equipe = Nucleo.booleano(o.get("equipe"));
             expiraEm = momento(Nucleo.texto(o.get("expiraEm")));
             copiaCola = Nucleo.texto(o.get("copiaCola"));
             recebedor = limpo(Nucleo.texto(o.get("recebedor")), 60, null);
             aviso = limpo(Nucleo.texto(o.get("aviso")), 200, null);
+            List<String> m = new ArrayList<>();
+            JsonElement ms = o.get("mensagem");
+            if (ms != null && ms.isJsonArray()) {
+                for (JsonElement el : ms.getAsJsonArray()) {
+                    String l = limpo(Nucleo.texto(el), 200, null);
+                    if (l != null && m.size() < 8) m.add(l);
+                }
+            }
+            mensagem = Collections.unmodifiableList(m);
             JsonElement qr = o.get("qr");
             int n = 0;
             byte[] bits = null;
@@ -214,8 +234,18 @@ final class Loja {
                         icone(p.get("icone")), Collections.unmodifiableList(vs)));
             }
         }
+        List<String> fora = new ArrayList<>();
+        JsonElement fs = j.get("fora");
+        if (fs != null && fs.isJsonArray()) {
+            for (JsonElement el : fs.getAsJsonArray()) {
+                if (!el.isJsonObject() || fora.size() >= 20) continue;
+                String n = limpo(Nucleo.texto(el.getAsJsonObject().get("nome")), 60, null);
+                String m = limpo(Nucleo.texto(el.getAsJsonObject().get("motivo")), 100, null);
+                if (n != null && m != null) fora.add(n + ": " + m);
+            }
+        }
         c = new Catalogo(!j.has("aberta") || Nucleo.booleano(j.get("aberta")), limpo(Nucleo.texto(j.get("motivo")), 200, null),
-                limpo(Nucleo.texto(j.get("nome")), 40, null), Collections.unmodifiableList(produtos));
+                limpo(Nucleo.texto(j.get("nome")), 40, null), Collections.unmodifiableList(produtos), Collections.unmodifiableList(fora));
         guardado = c;
         guardadoEm = System.currentTimeMillis();
         return c;

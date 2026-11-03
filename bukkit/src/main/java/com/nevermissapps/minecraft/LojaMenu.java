@@ -106,8 +106,14 @@ final class LojaMenu implements Listener {
             principal(() -> {
                 if (!p.isOnline()) return;
                 if (!c.aberta) avisar(p, "§c" + (c.motivo != null ? c.motivo : "A loja está fechada agora."));
-                else if (c.produtos.isEmpty()) avisar(p, "§7Nenhum produto à venda neste servidor agora.");
-                else produtos(p, c, 0);
+                else if (c.produtos.isEmpty()) {
+                    avisar(p, "§7Nenhum produto à venda neste servidor agora.");
+                    // O dono testando: por que cada produto do painel ficou fora (o jogador comum só lê a linha de cima)
+                    if (!c.fora.isEmpty()) {
+                        plugin.log("A /loja está vazia. Fora dela: " + String.join(" · ", c.fora));
+                        if (p.hasPermission("nevermiss.admin")) for (String f : c.fora) avisar(p, "§8(op) §7" + f);
+                    }
+                } else produtos(p, c, 0);
             });
         });
     }
@@ -175,6 +181,7 @@ final class LojaMenu implements Listener {
             lore.add((qtd >= v.descontoAPartirDe ? "§a" : "§7") + Loja.limpo(String.format("%.0f", v.descontoPct), 4, "") + "% de desconto a partir de " + v.descontoAPartirDe);
         }
         lore.add("§7Total: " + preco(total));
+        if (v.equipe) lore.add("§7A equipe entrega depois do pagamento");
         lore.addAll(cinza(v.descricao));
         por(t, 4, item(v.icone, Math.min(64, qtd), "§a" + v.nome, lore), null);
         if (v.max > v.min) {
@@ -239,7 +246,8 @@ final class LojaMenu implements Listener {
                 // Saiu enquanto o Pix era gerado: sem o mapa, o Pix vence sozinho
                 if (!p.isOnline()) return;
                 if ("pago".equals(ped.status)) {
-                    avisar(p, "§aResgatado! " + v.nome + " chega em instantes (pedido #" + ped.numero + ").");
+                    avisar(p, "§aResgatado! " + v.nome + (ped.equipe ? ": a equipe do servidor entrega em breve" : " chega em instantes") + " (pedido #" + ped.numero + ").");
+                    for (String l : ped.mensagem) avisar(p, "§f" + l);
                     som(p);
                 } else if ("aguardando".equals(ped.status)) {
                     entregarMapa(p, v, ped);
@@ -402,7 +410,13 @@ final class LojaMenu implements Listener {
                 if (System.currentTimeMillis() > a.vence + 10 * 60_000L) principal(() -> fechar(a, "§cO Pix do pedido #" + a.numero + " venceu."));
                 continue;
             }
-            if ("pago".equals(ped.status)) principal(() -> fechar(a, "§aPagamento aprovado! Pedido #" + a.numero + ": a entrega chega em instantes."));
+            if ("pago".equals(ped.status)) {
+                principal(() -> {
+                    Player p = Bukkit.getPlayer(a.jogador);
+                    fechar(a, "§aPagamento aprovado! Pedido #" + a.numero + (ped.equipe ? ": a equipe do servidor entrega em breve." : ": a entrega chega em instantes."));
+                    if (p != null) for (String l : ped.mensagem) avisar(p, "§f" + l);
+                });
+            }
             else if ("vencido".equals(ped.status)) principal(() -> fechar(a, "§cO Pix do pedido #" + a.numero + " venceu. Abra a /loja para gerar outro."));
             else if (!"aguardando".equals(ped.status)) principal(() -> fechar(a, "§c" + (ped.aviso != null ? ped.aviso : "O pedido #" + a.numero + " foi cancelado.")));
             // A YuvexPay sem dizer que venceu: passado o prazo, o mapa sai (pago depois disso, a entrega chega igual)
