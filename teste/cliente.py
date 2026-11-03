@@ -37,15 +37,16 @@ PLAY = {
     774: (0x2B, 0x1B, 0x77, 0x06, 0x20, 0x2B),
     777: (0x2D, 0x1C, 0x7C, 0x07, 0x20, 0x2C),
 }
-# A /loja: (menu abriu, dados do mapa, transação recusada (até o 1.16) que chegam; clique, desculpa da transação que saem).
+# A /loja: (menu abriu, dados do mapa, transação recusada (até o 1.16) que chegam; clique, desculpa da transação que saem;
+# conteúdo e espaço da janela (1.17+, trazem o state id que o clique devolve) que chegam).
 # 1.21.11 e 26.3 do relatório da Mojang; os outros da tabela de pacotes de cada versão, conferida com os de cima
 MENU = {
-    47: (0x2D, 0x34, 0x32, 0x0E, 0x0F),
-    340: (0x13, 0x24, 0x11, 0x07, 0x05),
-    754: (0x2D, 0x25, 0x11, 0x09, 0x07),
-    765: (0x31, 0x2A, None, 0x0D, None),
-    774: (0x39, 0x31, None, 0x11, None),
-    777: (0x3C, 0x34, None, 0x12, None),
+    47: (0x2D, 0x34, 0x32, 0x0E, 0x0F, None, None),
+    340: (0x13, 0x24, 0x11, 0x07, 0x05, None, None),
+    754: (0x2D, 0x25, 0x11, 0x09, 0x07, None, None),
+    765: (0x31, 0x2A, None, 0x0D, None, 0x13, 0x15),
+    774: (0x39, 0x31, None, 0x11, None, 0x12, 0x14),
+    777: (0x3C, 0x34, None, 0x12, None, 0x12, 0x14),
 }
 # configuração (1.20.2+): (terminou, keep-alive, ping, pacotes conhecidos, código de conduta, saída) que chegam,
 # e (terminou, keep-alive, pong, pacotes conhecidos, aceitar a conduta) que saem
@@ -137,12 +138,13 @@ def legivel(dados):
     return "".join(ch if ch.isprintable() else " " for ch in t).strip()
 
 
-def clique(proto, janela, espaco):
-    """O clique esquerdo (modo 0) no espaço do menu, sem item na mão. O servidor cancela (é a /loja) e manda o menu de novo."""
+def clique(proto, janela, espaco, estado=0):
+    """O clique esquerdo (modo 0) no espaço do menu, sem item na mão. O servidor cancela (é a /loja) e manda o menu de novo.
+    Do 1.17 em diante vai o state id do último conteúdo/espaço da janela: com outro, o Paper 1.21.11 ignora o clique."""
     if proto >= 768:  # 1.21.2+: o id da janela em varint; 1.21.5+: o item no cursor é um HashedStack opcional (vazio = 0)
-        return varint(janela) + varint(0) + struct.pack(">hb", espaco, 0) + varint(0) + varint(0) + b"\0"
+        return varint(janela) + varint(estado) + struct.pack(">hb", espaco, 0) + varint(0) + varint(0) + b"\0"
     if proto >= 755:  # 1.17 a 1.21.1: o state id e a lista dos espaços mudados
-        return bytes([janela]) + varint(0) + struct.pack(">hb", espaco, 0) + varint(0) + varint(0) + b"\0"
+        return bytes([janela]) + varint(estado) + struct.pack(">hb", espaco, 0) + varint(0) + varint(0) + b"\0"
     item = b"\0" if proto >= 393 else struct.pack(">h", -1)
     modo = bytes([0]) if proto == 47 else varint(0)
     return bytes([janela]) + struct.pack(">hbh", espaco, 0, 1) + modo + item
@@ -241,9 +243,11 @@ def main():
     print("CONECTADO %d" % proto, flush=True)
     menu = MENU.get(proto)
     janela = [None]
+    estados = {}
     mapas = {}
 
     def comandos():
+        ultimo = 0
         for linha in sys.stdin:
             linha = linha.strip()
             if not linha:
@@ -252,7 +256,9 @@ def main():
                 if menu is None or janela[0] is None:
                     print("SEMJANELA", flush=True)
                     continue
-                c.mandar(menu[3], clique(proto, janela[0], int(linha.split()[1])))
+                time.sleep(max(0, ultimo + 0.4 - time.time()))  # o menu ignora o 2º clique em menos de 250 ms
+                ultimo = time.time()
+                c.mandar(menu[3], clique(proto, janela[0], int(linha.split()[1]), estados.get(janela[0], 0)))
                 print("CLICOU " + linha.split()[1], flush=True)
                 continue
             if proto >= 760:
@@ -267,11 +273,23 @@ def main():
             print("MANDOU " + linha, flush=True)
 
     threading.Thread(target=comandos, daemon=True).start()
+
+    def parado():  # 1.8: o servidor só faz o tick do jogador (inventário e mapas) quando chega um movimento válido
+        while True:
+            c.mandar(0x03, b"\1")
+            time.sleep(0.05)
+
     if carregou is not None:
         c.mandar(carregou)
     try:
         while True:
             pid, dados = c.pacote()
+            if os.environ.get("NM_PACOTES") and janela[0] is not None:  # depuração: id e tamanho de cada pacote
+                print("PACOTE 0x%02X %d" % (pid, len(dados)), flush=True)
+            if pid == 0x01 and proto == 47:  # o Join Game: daqui em diante o servidor aceita o movimento
+                threading.Thread(target=parado, daemon=True).start()
+            if pid == 0x08 and proto == 47:  # o teleporte: só volta a fazer o tick quando o jogador confirma a posição
+                c.mandar(0x06, dados[:32] + b"\1")
             if pid == ka_in:
                 c.mandar(ka_out, dados)
             elif pid == chat_in:
@@ -279,6 +297,9 @@ def main():
             elif menu and pid == menu[0]:
                 janela[0], i = (dados[0], 1) if proto < 477 else varint_de(dados)
                 print("JANELA %d %s" % (janela[0], legivel(dados[i:])), flush=True)
+            elif menu and pid in (menu[5], menu[6]):
+                jid, i = (dados[0], 1) if proto < 768 else varint_de(dados)
+                estados[jid] = varint_de(dados, i)[0]
             elif menu and pid == menu[1]:
                 m = mapa(proto, dados, mapas, pasta)
                 if m:
