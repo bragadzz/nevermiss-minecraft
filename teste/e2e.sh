@@ -468,6 +468,7 @@ if [ -n "$LOJA" ]; then
     else grep -qE "No items were found|no items to remove" "$DIR/mapa.txt" || falha "o mapa do Pix ficou com $1: $(cat "$DIR/mapa.txt")"; fi
   }
   mkdir -p "$DIR/mapas" && rm -f "$DIR/mapas/"*
+  console "difficulty peaceful" # um monstro mata o jogador no meio da compra (o slime do 1.12.2), e morto o menu não abre
   NM_MAPAS="$DIR/mapas" jogador Comprador 7
   echo "loja" >&7
   janela Comprador "Loja .*Teste" 1 20
@@ -479,8 +480,8 @@ if [ -n "$LOJA" ]; then
   chat Comprador "Gerando o Pix" 1 10
   chat Comprador "Pix de .*39,80.*gerado: pedido .*#T00001" 1 20
   for _ in $(seq 20); do grep -q '^MAPA ' "$DIR/Comprador.log" && break; sleep 1; done
-  MAPA=$(grep '^MAPA ' "$DIR/Comprador.log" | tail -1 | cut -d' ' -f3)
-  [ -f "$MAPA" ] || falha "o jogador não recebeu os pixels do mapa: $(tail -5 "$DIR/Comprador.log")"
+  MAPA=$(grep '^MAPA ' "$DIR/Comprador.log" | tail -1 | cut -d' ' -f3 || true)
+  [ -n "$MAPA" ] && [ -f "$MAPA" ] || falha "o jogador não recebeu os pixels do mapa: $(tail -5 "$DIR/Comprador.log")"
   sleep 2
   LIDO=$(swift "$RAIZ/teste/lerqr.swift" "$MAPA" "$DIR/mapas/qr.png") || falha "o leitor de QR não leu o mapa ($DIR/mapas/qr.png)"
   ESPERADO=$(sed -n 's/.*String COPIA_COLA = "\([^"]*\)".*/\1/p' "$RAIZ/core/src/test/java/com/nevermissapps/minecraft/ApiFalsa.java")
