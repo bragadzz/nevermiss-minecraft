@@ -319,6 +319,12 @@ public final class ApiFalsa implements AutoCloseable {
             o.add("qr", qr);
         }
         o.addProperty("recebedor", aberto ? "NEVERMISS TESTE" : null);
+        if ("pago".equals(p.get("status").getAsString())) {
+            JsonArray m = new JsonArray();
+            m.add("Seu VIP Ouro foi ativado.");
+            m.add("Use /vip para ver os comandos.");
+            o.add("mensagem", m);
+        }
         return o;
     }
 

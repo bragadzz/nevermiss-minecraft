@@ -83,7 +83,7 @@ public class LojaTest {
         api.pedidosLoja.get(p.numero).addProperty("status", "pago");
         Loja.Pedido pago = loja.status(p.numero);
         assertEquals("pago", pago.status);
-        assertTrue(pago.mensagem.isEmpty());
+        assertEquals(java.util.Arrays.asList("Seu VIP Ouro foi ativado.", "Use /vip para ver os comandos."), pago.mensagem);
         assertEquals(0, pago.tamanho);
     }
 
