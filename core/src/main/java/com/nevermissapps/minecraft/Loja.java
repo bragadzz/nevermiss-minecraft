@@ -99,15 +99,20 @@ final class Loja {
             return true;
         }
 
-        /** O menor preço do que está à venda (o "a partir de" quando há mais de um). */
+        /** O menor preço do que está à venda, sem o grátis (como a API: só grátis = o produto diz Grátis). */
         double menor() {
             double m = Double.MAX_VALUE;
-            for (Variacao v : variacoes) if (!v.esgotado || esgotado()) m = Math.min(m, v.preco);
-            return m;
+            for (Variacao v : variacoes) if ((!v.esgotado || esgotado()) && !v.gratis) m = Math.min(m, v.preco);
+            return m == Double.MAX_VALUE ? 0 : m;
         }
 
         boolean aPartirDe() {
-            for (Variacao v : variacoes) if (v.preco != variacoes.get(0).preco) return true;
+            double primeiro = -1;
+            for (Variacao v : variacoes) {
+                if (v.gratis) continue;
+                if (primeiro >= 0 && v.preco != primeiro) return true;
+                primeiro = v.preco;
+            }
             return false;
         }
     }
@@ -135,6 +140,8 @@ final class Loja {
         final long expiraEm;
         final String copiaCola;
         final String recebedor;
+        // O que dizer ao jogador quando o pedido não vai ser entregue (cancelado, reembolsado, esgotou depois de pagar)
+        final String aviso;
         // O QR (tamanho × tamanho módulos), bit a bit em linhas. null fora do "aguardando"
         final int tamanho;
         private final byte[] modulos;
@@ -147,6 +154,7 @@ final class Loja {
             expiraEm = momento(Nucleo.texto(o.get("expiraEm")));
             copiaCola = Nucleo.texto(o.get("copiaCola"));
             recebedor = limpo(Nucleo.texto(o.get("recebedor")), 60, null);
+            aviso = limpo(Nucleo.texto(o.get("aviso")), 200, null);
             JsonElement qr = o.get("qr");
             int n = 0;
             byte[] bits = null;
@@ -213,8 +221,11 @@ final class Loja {
         return c;
     }
 
-    /** Compra uma variação: o Pix (ou o grátis, já pago). chave: o mesmo clique repetido devolve o mesmo pedido. */
-    Pedido comprar(Produto p, Variacao v, int qtd, String nick, boolean bedrock, String chave) throws Erro {
+    /**
+     * Compra uma variação: o Pix (ou o grátis, já pago). chave: o mesmo clique repetido devolve o mesmo pedido. ip: o do jogador
+     * (no servidor pirata o nick é livre; a API guarda só o hash). totalVisto: o que o menu mostrou (preço mudado = recusa).
+     */
+    Pedido comprar(Produto p, Variacao v, int qtd, String nick, boolean bedrock, String chave, String ip) throws Erro {
         JsonObject corpo = new JsonObject();
         corpo.addProperty("produto", p.id);
         corpo.addProperty("variacao", v.id);
@@ -222,6 +233,8 @@ final class Loja {
         corpo.addProperty("nick", nick);
         corpo.addProperty("edicao", bedrock ? "bedrock" : "java");
         corpo.add("chave", new JsonPrimitive(chave));
+        if (ip != null) corpo.addProperty("ip", ip);
+        corpo.addProperty("totalVisto", v.total(qtd));
         // O estoque mudou: o próximo /loja lê de novo
         guardado = null;
         return pedido(pedir("/v1/minecraft/loja/pedidos", corpo));

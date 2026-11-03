@@ -20,10 +20,11 @@ commands:
     description: O /kit da NeverMiss, para o servidor que já tem outro /kit (EssentialsX).
     usage: /nmkit [nome do kit]
     permission: nevermiss.kit
-  loja:
+  # O /loja e o /shop são apelidos: no Bukkit o apelido nunca toma o comando de outro plugin (a loja que o servidor já tem fica)
+  nmloja:
     description: Abre a loja do servidor (os produtos da NeverMiss) e paga com Pix.
     usage: /loja
-    aliases: [shop, nmloja]
+    aliases: [loja, shop]
     permission: nevermiss.loja
 permissions:
   nevermiss.admin:

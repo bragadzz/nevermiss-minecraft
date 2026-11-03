@@ -5,12 +5,18 @@ import net.md_5.bungee.api.chat.HoverEvent;
 import net.md_5.bungee.api.chat.TextComponent;
 import org.bukkit.Bukkit;
 import org.bukkit.Material;
+import org.bukkit.entity.ItemFrame;
 import org.bukkit.entity.Player;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.Listener;
+import org.bukkit.event.entity.PlayerDeathEvent;
 import org.bukkit.event.inventory.InventoryClickEvent;
 import org.bukkit.event.inventory.InventoryDragEvent;
+import org.bukkit.event.inventory.InventoryType;
+import org.bukkit.event.player.PlayerDropItemEvent;
+import org.bukkit.event.player.PlayerInteractEntityEvent;
 import org.bukkit.event.player.PlayerJoinEvent;
+import org.bukkit.event.player.PlayerRespawnEvent;
 import org.bukkit.inventory.Inventory;
 import org.bukkit.inventory.InventoryHolder;
 import org.bukkit.inventory.ItemFlag;
@@ -55,11 +61,16 @@ final class LojaMenu implements Listener {
         final String numero;
         final UUID jogador;
         final long vence;
+        // O item (volta depois da morte) e o desenho (apaga o QR quando fecha, onde quer que o mapa esteja)
+        final ItemStack mapa;
+        final Qr qr;
 
-        Aberto(String numero, UUID jogador, long vence) {
+        Aberto(String numero, UUID jogador, long vence, ItemStack mapa, Qr qr) {
             this.numero = numero;
             this.jogador = jogador;
             this.vence = vence;
+            this.mapa = mapa;
+            this.qr = qr;
         }
     }
 
@@ -203,15 +214,21 @@ final class LojaMenu implements Listener {
             avisar(p, "§cLibere um espaço no inventário para receber o mapa do Pix.");
             return;
         }
-        if (!gerando.add(p.getUniqueId())) return;
         String gamertag = gamertag(p);
+        // O Floodgate só no proxy: o nome do jogador Bedrock aqui é ".Fulano", que não é nick nem gamertag
+        if (gamertag == null && !Nucleo.NICK.matcher(p.getName()).matches()) {
+            avisar(p, "§cA /loja não reconhece o seu nick neste servidor. Avise a equipe: o Floodgate tem que estar aqui também.");
+            return;
+        }
+        if (!gerando.add(p.getUniqueId())) return;
         String nick = gamertag != null ? gamertag : p.getName();
         String chave = UUID.randomUUID().toString();
+        String ip = p.getAddress() == null ? null : p.getAddress().getAddress().getHostAddress();
         avisar(p, v.gratis ? "§7Resgatando..." : "§7Gerando o Pix...");
         assincrono(() -> {
             Loja.Pedido ped;
             try {
-                ped = loja.comprar(pr, v, qtd, nick, gamertag != null, chave);
+                ped = comprar(pr, v, qtd, nick, gamertag != null, chave, ip);
             } catch (Loja.Erro e) {
                 gerando.remove(p.getUniqueId());
                 principal(() -> avisar(p, "§c" + e.getMessage()));
@@ -219,25 +236,44 @@ final class LojaMenu implements Listener {
             }
             principal(() -> {
                 gerando.remove(p.getUniqueId());
+                // Saiu enquanto o Pix era gerado: sem o mapa, o Pix vence sozinho
+                if (!p.isOnline()) return;
                 if ("pago".equals(ped.status)) {
                     avisar(p, "§aResgatado! " + v.nome + " chega em instantes (pedido #" + ped.numero + ").");
                     som(p);
                 } else if ("aguardando".equals(ped.status)) {
                     entregarMapa(p, v, ped);
                 } else {
-                    avisar(p, "§cEste pedido não está mais aberto (pedido #" + ped.numero + ").");
+                    avisar(p, "§c" + (ped.aviso != null ? ped.aviso : "Este pedido não está mais aberto (pedido #" + ped.numero + ")."));
                 }
             });
         });
     }
 
+    /** A resposta perdida (a API criou o Pix, mas demorou): tenta de novo com a mesma chave, que devolve o mesmo pedido. */
+    private Loja.Pedido comprar(Loja.Produto pr, Loja.Variacao v, int qtd, String nick, boolean bedrock, String chave, String ip) throws Loja.Erro {
+        try {
+            return loja.comprar(pr, v, qtd, nick, bedrock, chave, ip);
+        } catch (Loja.Erro e) {
+            if (!Loja.FORA.equals(e.getMessage())) throw e;
+            try {
+                Thread.sleep(3000);
+            } catch (InterruptedException i) {
+                Thread.currentThread().interrupt();
+                throw e;
+            }
+            return loja.comprar(pr, v, qtd, nick, bedrock, chave, ip);
+        }
+    }
+
     private void entregarMapa(Player p, Loja.Variacao v, Loja.Pedido ped) {
         ItemStack mapa;
+        Qr qr = new Qr(ped);
         try {
-            mapa = mapa(p, ped);
+            mapa = mapa(p, ped, qr);
         } catch (ReflectiveOperationException | RuntimeException e) {
             plugin.aviso("A /loja não conseguiu montar o mapa do Pix: " + e);
-            avisar(p, "§cNão deu para mostrar o QR Code aqui. Pedido #" + ped.numero + ": use o copia e cola abaixo.");
+            avisar(p, "§cNão deu para mostrar o QR Code aqui (pedido #" + ped.numero + "). Avise a equipe do servidor.");
             copiaECola(p, ped);
             return;
         }
@@ -258,7 +294,7 @@ final class LojaMenu implements Listener {
             }
         }
         long vence = ped.expiraEm > 0 ? ped.expiraEm : System.currentTimeMillis() + 15 * 60_000L;
-        abertos.put(ped.numero, new Aberto(ped.numero, p.getUniqueId(), vence));
+        abertos.put(ped.numero, new Aberto(ped.numero, p.getUniqueId(), vence, mapa.clone(), qr));
         avisar(p, "§fPix de " + preco(ped.total) + " §fgerado: pedido §e#" + ped.numero + "§f.");
         avisar(p, "§7Segure o mapa e leia o QR Code com o app do banco. Vence em 15 min.");
         if (ped.recebedor != null) avisar(p, "§7Recebedor: §f" + ped.recebedor);
@@ -282,11 +318,12 @@ final class LojaMenu implements Listener {
     // --- O mapa ---
 
     @SuppressWarnings("deprecation")
-    private ItemStack mapa(Player p, Loja.Pedido ped) throws ReflectiveOperationException {
+    private ItemStack mapa(Player p, Loja.Pedido ped, Qr qr) throws ReflectiveOperationException {
         MapView view = Bukkit.createMap(p.getWorld());
         for (MapRenderer r : new ArrayList<>(view.getRenderers())) view.removeRenderer(r);
         view.setScale(MapView.Scale.CLOSEST);
-        view.addRenderer(new Qr(ped));
+        // Um mapa novo (map_N.dat) por Pix: reaproveitar os ids só se algum servidor juntar milhares
+        view.addRenderer(qr);
         // short no 1.8, int do 1.13 em diante: pela reflexão
         int id = ((Number) MapView.class.getMethod("getId").invoke(view)).intValue();
         ItemStack item;
@@ -309,10 +346,12 @@ final class LojaMenu implements Listener {
         return item;
     }
 
-    /** O QR pintado uma vez (o canvas fica): branco, os módulos pretos de 2 pixels e a margem em volta. */
+    /** O QR pintado uma vez (o canvas fica): branco, os módulos pretos de 2 pixels e a margem em volta. Fechado, fica em branco. */
     private static final class Qr extends MapRenderer {
         private final Loja.Pedido ped;
         private boolean feito;
+        private volatile boolean fechado;
+        private boolean limpo;
 
         Qr(Loja.Pedido ped) {
             super(false);
@@ -322,6 +361,11 @@ final class LojaMenu implements Listener {
         @SuppressWarnings("deprecation")
         @Override
         public void render(MapView view, MapCanvas canvas, Player player) {
+            if (fechado) {
+                if (!limpo) for (int x = 0; x < 128; x++) for (int y = 0; y < 128; y++) canvas.setPixel(x, y, BRANCO);
+                limpo = true;
+                return;
+            }
             if (feito) return;
             feito = true;
             int n = ped.tamanho;
@@ -360,13 +404,16 @@ final class LojaMenu implements Listener {
             }
             if ("pago".equals(ped.status)) principal(() -> fechar(a, "§aPagamento aprovado! Pedido #" + a.numero + ": a entrega chega em instantes."));
             else if ("vencido".equals(ped.status)) principal(() -> fechar(a, "§cO Pix do pedido #" + a.numero + " venceu. Abra a /loja para gerar outro."));
-            else if (!"aguardando".equals(ped.status)) principal(() -> fechar(a, "§cO pedido #" + a.numero + " foi cancelado."));
+            else if (!"aguardando".equals(ped.status)) principal(() -> fechar(a, "§c" + (ped.aviso != null ? ped.aviso : "O pedido #" + a.numero + " foi cancelado.")));
+            // A YuvexPay sem dizer que venceu: passado o prazo, o mapa sai (pago depois disso, a entrega chega igual)
+            else if (System.currentTimeMillis() > a.vence + 60_000L) principal(() -> fechar(a, "§cO Pix do pedido #" + a.numero + " venceu. Abra a /loja para gerar outro."));
         }
         conferirDepois();
     }
 
     private void fechar(Aberto a, String msg) {
         if (abertos.remove(a.numero) == null) return;
+        a.qr.fechado = true;
         // Offline: o mapa sai quando ele entrar (o pedido já não está em abertos)
         Player p = Bukkit.getPlayer(a.jogador);
         if (p == null) return;
@@ -379,6 +426,55 @@ final class LojaMenu implements Listener {
     @EventHandler
     public void entrou(PlayerJoinEvent e) {
         tirarMapas(e.getPlayer(), null);
+    }
+
+    private static boolean ehMapa(ItemStack x) {
+        return x != null && x.hasItemMeta() && x.getItemMeta().hasDisplayName() && x.getItemMeta().getDisplayName().startsWith(MAPA);
+    }
+
+    // --- O mapa fica com o jogador: não cai, não vai para baú nem para moldura; morrendo, volta no respawn ---
+
+    @EventHandler
+    public void largou(PlayerDropItemEvent e) {
+        if (!ehMapa(e.getItemDrop().getItemStack())) return;
+        e.setCancelled(true);
+        avisar(e.getPlayer(), "§7O mapa do Pix fica com você até pagar ou vencer.");
+    }
+
+    @EventHandler
+    public void guardou(InventoryClickEvent e) {
+        InventoryType tipo = e.getView().getTopInventory().getType();
+        if (e.getInventory().getHolder() instanceof Tela || tipo == InventoryType.CRAFTING || tipo == InventoryType.CREATIVE) return;
+        ItemStack atalho = e.getHotbarButton() >= 0 ? e.getWhoClicked().getInventory().getItem(e.getHotbarButton()) : null;
+        if (ehMapa(e.getCurrentItem()) || ehMapa(e.getCursor()) || ehMapa(atalho)) e.setCancelled(true);
+    }
+
+    @EventHandler
+    public void arrastouMapa(InventoryDragEvent e) {
+        InventoryType tipo = e.getView().getTopInventory().getType();
+        if (tipo != InventoryType.CRAFTING && tipo != InventoryType.CREATIVE && ehMapa(e.getOldCursor())) e.setCancelled(true);
+    }
+
+    @SuppressWarnings("deprecation")
+    @EventHandler
+    public void moldura(PlayerInteractEntityEvent e) {
+        if (e.getRightClicked() instanceof ItemFrame && ehMapa(e.getPlayer().getItemInHand())) e.setCancelled(true);
+    }
+
+    @EventHandler
+    public void morreu(PlayerDeathEvent e) {
+        e.getDrops().removeIf(LojaMenu::ehMapa);
+    }
+
+    @EventHandler
+    public void voltou(PlayerRespawnEvent e) {
+        Player p = e.getPlayer();
+        for (Aberto a : abertos.values()) {
+            if (!a.jogador.equals(p.getUniqueId())) continue;
+            boolean tem = false;
+            for (ItemStack x : p.getInventory().getContents()) tem |= ehMapa(x) && x.getItemMeta().getDisplayName().equals(MAPA + a.numero);
+            if (!tem) p.getInventory().addItem(a.mapa.clone());
+        }
     }
 
     /** numeros null = todo mapa de pedido que não está aberto. */

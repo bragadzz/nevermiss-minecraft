@@ -108,7 +108,7 @@ public final class NeverMiss extends JavaPlugin implements Listener, Jogo {
             else loja.abrir(p);
         } else if (command.getName().equalsIgnoreCase("nevermiss")) {
             laco.comando(args, sender instanceof ConsoleCommandSender, texto -> agenda.responder(sender, texto));
-        } else if (command.getName().equalsIgnoreCase("loja")) {
+        } else if (command.getName().equalsIgnoreCase("nmloja")) {
             if (!(sender instanceof Player)) sender.sendMessage("[NeverMiss] A /loja é do jogador. Para abrir a de alguém: nevermiss loja <jogador>");
             else if (loja == null) sender.sendMessage("§cA /loja ainda não funciona neste servidor (Folia).");
             else loja.abrir((Player) sender);

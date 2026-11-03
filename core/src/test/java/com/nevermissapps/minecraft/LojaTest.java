@@ -66,7 +66,7 @@ public class LojaTest {
     @Test
     public void pixComQrPagoDepois() throws Exception {
         Loja.Catalogo c = loja.catalogo();
-        Loja.Pedido p = loja.comprar(c.produtos.get(0), c.produtos.get(0).variacoes.get(0), 2, "Steve", false, "chave-de-teste-1");
+        Loja.Pedido p = loja.comprar(c.produtos.get(0), c.produtos.get(0).variacoes.get(0), 2, "Steve", false, "chave-de-teste-1", "203.0.113.7");
         assertEquals("aguardando", p.status);
         assertEquals(39.8, p.total, 0.001);
         assertEquals(ApiFalsa.COPIA_COLA, p.copiaCola);
@@ -78,7 +78,7 @@ public class LojaTest {
         assertTrue(p.modulo(0, 48));
         assertTrue(System.currentTimeMillis() < p.expiraEm);
         // O mesmo clique de novo: o mesmo pedido
-        assertEquals(p.numero, loja.comprar(c.produtos.get(0), c.produtos.get(0).variacoes.get(0), 2, "Steve", false, "chave-de-teste-1").numero);
+        assertEquals(p.numero, loja.comprar(c.produtos.get(0), c.produtos.get(0).variacoes.get(0), 2, "Steve", false, "chave-de-teste-1", "203.0.113.7").numero);
         api.pedidosLoja.get(p.numero).addProperty("status", "pago");
         Loja.Pedido pago = loja.status(p.numero);
         assertEquals("pago", pago.status);

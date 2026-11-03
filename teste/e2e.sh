@@ -470,14 +470,14 @@ if [ -n "$LOJA" ]; then
   mkdir -p "$DIR/mapas" && rm -f "$DIR/mapas/"*
   NM_MAPAS="$DIR/mapas" jogador Comprador 7
   echo "loja" >&7
-  janela Comprador "Loja . Teste" 1 20
+  janela Comprador "Loja .*Teste" 1 20
   echo "@clicar 0" >&7
   janela Comprador "VIP Ouro" 1 10
   echo "@clicar 15" >&7
   janela Comprador "VIP Ouro" 2 10
   echo "@clicar 22" >&7
   chat Comprador "Gerando o Pix" 1 10
-  chat Comprador "Pix de .*39,80 .*gerado: pedido #T00001" 1 20
+  chat Comprador "Pix de .*39,80.*gerado: pedido .*#T00001" 1 20
   for _ in $(seq 20); do grep -q '^MAPA ' "$DIR/Comprador.log" && break; sleep 1; done
   MAPA=$(grep '^MAPA ' "$DIR/Comprador.log" | tail -1 | cut -d' ' -f3)
   [ -f "$MAPA" ] || falha "o jogador não recebeu os pixels do mapa: $(tail -5 "$DIR/Comprador.log")"
@@ -496,16 +496,16 @@ if [ -n "$LOJA" ]; then
   else console "scoreboard players get Comprador vip"; sleep 2; noLog 'Comprador has 2 \[vip\]' || falha "o placar do Comprador não é 2"; fi
   # A Chave lendária esgotada recusa; a Chave rara gera outro Pix, que vence e tira o mapa
   echo "loja" >&7
-  janela Comprador "Loja . Teste" 2 20
+  janela Comprador "Loja .*Teste" 2 20
   echo "@clicar 1" >&7
   janela Comprador "Chaves" 1 10
   echo "@clicar 1" >&7
   chat Comprador "Chave lendaria está esgotado" 1 10
   sleep 1 # o menu ignora o 2º clique em menos de 250 ms
   echo "@clicar 0" >&7
-  janela Comprador "Chaves . Chave rara" 1 10
+  janela Comprador "Chaves .*Chave rara" 1 10
   echo "@clicar 22" >&7
-  chat Comprador "gerado: pedido #T00002" 1 20
+  chat Comprador "gerado: pedido .*#T00002" 1 20
   temMapa Comprador 1
   curl -fsS -X POST "$API/teste/vencer" -d '{"numero":"T00002"}' >/dev/null
   chat Comprador "O Pix do pedido #T00002 venceu" 1 20
