@@ -495,7 +495,7 @@ if [ -n "$LOJA" ]; then
   chat Comprador "Use /vip para ver os comandos" 1 10
   # O aviso para todos, com o [Ver na loja] que roda "/nmloja vip" (no 1.20.3+ o pedaço do clique vem antes do texto)
   chat Comprador "Comprador .*comprou .*VIP Ouro" 1 10
-  chat Comprador "run_command.*/nmloja vip" 1 10
+  chat Comprador "click.*/nmloja vip" 1 10
   espera loja-T00001 "entregue" 40
   temMapa Comprador 0
   if antigo "$VERSAO"; then console "scoreboard players list Comprador"; sleep 2; noLog 'vip: 2' || falha "o placar do Comprador não é 2"
