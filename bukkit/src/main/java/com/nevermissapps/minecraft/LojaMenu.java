@@ -196,7 +196,9 @@ final class LojaMenu implements Listener {
             return;
         }
         boolean bedrock = gamertag(p) != null;
-        Tela t = tela(3, v.nome.equals(pr.nome) ? pr.nome : pr.nome + " · " + v.nome);
+        // "Categoria · Produto" só se couber nas 30 letras do título; senão, só o produto (cortado, a categoria some primeiro)
+        String junto = pr.nome + " · " + v.nome;
+        Tela t = tela(3, v.nome.equals(pr.nome) || junto.length() > 30 ? v.nome : junto);
         double total = v.total(qtd);
         List<String> lore = new ArrayList<>();
         lore.add("§7Preço: " + preco(v.gratis ? 0 : v.preco) + de(v));

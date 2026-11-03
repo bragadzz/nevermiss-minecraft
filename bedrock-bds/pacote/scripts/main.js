@@ -5,7 +5,7 @@ import { HttpHeader, HttpRequest, HttpRequestMethod, http } from "@minecraft/ser
 import { secrets, variables } from "@minecraft/server-admin";
 import { API_PADRAO, Nucleo, validarApi } from "./nucleo.js";
 
-const VERSAO = "1.3.0";
+const VERSAO = "1.3.1";
 // O espaço do Bukkit (contrato, 17.1) → o do corpo no Bedrock. 0 a 35 são os mesmos índices no inventário do Bedrock.
 const CORPO = { 36: EquipmentSlot.Feet, 37: EquipmentSlot.Legs, 38: EquipmentSlot.Chest, 39: EquipmentSlot.Head, 40: EquipmentSlot.Offhand };
 // O id do Java que tem outro nome no Bedrock. O sweeping_edge não existe no Bedrock (é pulado).
