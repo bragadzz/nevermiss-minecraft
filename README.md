@@ -13,15 +13,15 @@ Ou monta um **Kit da NeverMiss** no painel: o plugin põe os itens no inventári
 
 | Plataforma | Versões | Arquivo | Kit da NeverMiss | Provado num servidor de verdade (`teste/e2e.sh`) | Sem prova |
 |---|---|---|---|---|---|
-| Spigot, Paper e forks | 1.7.10 ao 26.x | `NeverMiss-Bukkit-1.2.0.jar` | sim | Com o kit e o `/kit` por um jogador: Paper 1.8.8, 1.12.2, 1.20.4 e 1.21.11 (código final), e 1.7.10, 1.16.5 e 26.3 (1.2.0 antes das últimas correções do core). O catálogo inteiro de itens do painel em 1.8.8, 1.12.2, 1.20.4 e 1.21.11 | Spigot puro (BuildTools). No 1.7.10 o inventário só foi conferido fora do teste |
-| Folia | 1.19.4 em diante | `NeverMiss-Bukkit-1.2.0.jar` (o mesmo) | não (o item precisa ir na região do jogador) | Folia 1.21.11 sem kit (1.2.0 antes das últimas correções do core) | Folia com o código final |
-| Fabric (só no servidor, sem o Fabric API) | 1.16.5 ao 26.x, Fabric Loader 0.14+ | `NeverMiss-Fabric-1.16.5-26.x-1.2.0.jar` | sim | Nenhum: só os testes sem servidor e os nomes do jogo conferidos nos mapas oficiais de 14 versões | Tudo num servidor de verdade (entrega, kit, `/kit`). Bedrock |
-| Forge (só no servidor) | 1.16.5 ao 1.20.1 | `NeverMiss-Forge-1.16.5-1.20.1-NeoForge-1.20.4-26.x-1.2.0.jar` | sim | Nenhum: só o teste sem servidor e os nomes conferidos nos mapas e nas classes do Forge de cada versão | Tudo num servidor de verdade. O Forge 1.20.2 em diante não é atendido: o servidor sobe e o console avisa que o NeverMiss não entrega nada |
-| NeoForge (só no servidor) | 1.20.4 ao 26.x | o mesmo do Forge | sim | Nenhum, como o Forge | Tudo num servidor de verdade |
-| Forge 1.12.2 (só no servidor) | 1.12.2 | `NeverMiss-Forge-1.12.2-1.2.0.jar` | sim | Nenhum: compila contra os nomes do jogo, conferidos nos mapas MCP | Tudo num servidor de verdade. Sem Bedrock |
-| PowerNukkitX (servidor Bedrock) | 3.x (Java 25) | `NeverMiss-PowerNukkitX-3.x-1.2.0.jar` | não (o catálogo tem só os itens do Java) | PowerNukkitX 3.0.6 com o código final, com um jogador Bedrock entrando pelo NetherNet | O 3.0.5 parou na entrada do jogador. O `{uuid}` com conta Xbox. Nukkit, Nukkit-MOT e PowerNukkitX 2.x não são atendidos |
-| Velocity (proxy) | 3.1.1 em diante | `NeverMiss-Velocity-1.2.0.jar` | não (proxy não tem inventário) | Velocity 3.5.1 sozinho, com o código final (o kit que chega é recusado). Na 1.1.0: 3.5.1 e 4.3.1 com um Paper atrás | Velocity 4.3.1 e a entrega com um Paper atrás, com a 1.2.0 |
-| BungeeCord e Waterfall (proxy) | API do 1.16 em diante | `NeverMiss-Bungee-1.2.0.jar` | não | Na 1.1.0: BungeeCord build 2107 e Waterfall 1.21, com um Paper atrás | Os dois com a 1.2.0 |
+| Spigot, Paper e forks | 1.7.10 ao 26.x | `NeverMiss-Bukkit-1.3.0.jar` | sim | Com o kit e o `/kit` por um jogador: Paper 1.8.8, 1.12.2, 1.20.4 e 1.21.11 (código final), e 1.7.10, 1.16.5 e 26.3 (1.2.0 antes das últimas correções do core). O catálogo inteiro de itens do painel em 1.8.8, 1.12.2, 1.20.4 e 1.21.11 | Spigot puro (BuildTools). No 1.7.10 o inventário só foi conferido fora do teste |
+| Folia | 1.19.4 em diante | `NeverMiss-Bukkit-1.3.0.jar` (o mesmo) | não (o item precisa ir na região do jogador) | Folia 1.21.11 sem kit (1.2.0 antes das últimas correções do core) | Folia com o código final |
+| Fabric (só no servidor, sem o Fabric API) | 1.16.5 ao 26.x, Fabric Loader 0.14+ | `NeverMiss-Fabric-1.16.5-26.x-1.3.0.jar` | sim | Com o kit e o `/kit` por um jogador: Fabric 1.20.1, 1.21.1 e 26.3 (a entrega, o kit e o `/kit` provados antes da /loja entrar no core) | O 1.16.5 ao 1.19 num servidor de verdade. Bedrock |
+| Forge (só no servidor) | 1.16.5 ao 1.20.1 | `NeverMiss-Forge-1.16.5-1.20.1-NeoForge-1.20.4-26.x-1.3.0.jar` | sim | Com o kit e o `/kit` por um jogador: Forge 1.20.1 | O 1.16.5 ao 1.19 num servidor de verdade. O Forge 1.20.2 em diante não é atendido: o servidor sobe e o console avisa que o NeverMiss não entrega nada |
+| NeoForge (só no servidor) | 1.20.4 ao 26.x | o mesmo do Forge | sim | Com o kit e o `/kit` por um jogador: NeoForge 1.20.4, 1.21.1 e 26.3 | As versões do meio |
+| Forge 1.12.2 (só no servidor) | 1.12.2 | `NeverMiss-Forge-1.12.2-1.3.0.jar` | sim | Com o kit e o `/kit` por um jogador: Forge 1.12.2 | Sem Bedrock |
+| PowerNukkitX (servidor Bedrock) | 3.x (Java 25) | `NeverMiss-PowerNukkitX-3.x-1.3.0.jar` | não (o catálogo tem só os itens do Java) | PowerNukkitX 3.0.6 com o código final, com um jogador Bedrock entrando pelo NetherNet | O 3.0.5 parou na entrada do jogador. O `{uuid}` com conta Xbox. Nukkit, Nukkit-MOT e PowerNukkitX 2.x não são atendidos |
+| Velocity (proxy) | 3.1.1 em diante | `NeverMiss-Velocity-1.3.0.jar` | não (proxy não tem inventário) | Velocity 3.5.1 sozinho, com o código final (o kit que chega é recusado). Na 1.1.0: 3.5.1 e 4.3.1 com um Paper atrás | Velocity 4.3.1 e a entrega com um Paper atrás, com a 1.2.0 |
+| BungeeCord e Waterfall (proxy) | API do 1.16 em diante | `NeverMiss-Bungee-1.3.0.jar` | não | Na 1.1.0: BungeeCord build 2107 e Waterfall 1.21, com um Paper atrás | Os dois com a 1.2.0 |
 | Bedrock pelo Geyser + Floodgate | Floodgate 2.x | o do Bukkit, Velocity ou Bungee | só o da compra (sem `/kit`) | Na 1.1.0: Paper 1.21.11 com Geyser 2.12.1 e Floodgate 2.2.5; Velocity e BungeeCord com Floodgate 2.2.5 | Com a 1.2.0, e o kit dado a um jogador Bedrock (só no teste do core). No Fabric, no Forge e no NeoForge |
 
 - **Spigot, Paper, Folia e PowerNukkitX:** o jar vai em `plugins/`. **Fabric, Forge e NeoForge:** em `mods/`, a chave em `config/nevermiss/config.yml`, e o `/nevermiss` é de quem pode o `/op` (nível 3). O jogador não instala nada.
@@ -35,9 +35,9 @@ Ou monta um **Kit da NeverMiss** no painel: o plugin põe os itens no inventári
 3. No console (do servidor ou do proxy): `nevermiss chave <a chave>`.
 4. Em até 1 minuto o painel mostra **Conectado**.
 
-Confira o SHA-256 do jar antes de instalar (`shasum -a 256 NeverMiss-Bukkit-1.2.0.jar` ou `certutil -hashfile NeverMiss-Bukkit-1.2.0.jar SHA256`). Ele tem que bater com o que a NeverMiss publica. Se não bater, não instale.
+Confira o SHA-256 do jar antes de instalar (`shasum -a 256 NeverMiss-Bukkit-1.3.0.jar` ou `certutil -hashfile NeverMiss-Bukkit-1.3.0.jar SHA256`). Ele tem que bater com o que a NeverMiss publica. Se não bater, não instale.
 
-Quem tem o `NeverMiss-1.0.0.jar` ou o `NeverMiss-Bukkit-1.1.0.jar`: apague ele e ponha o `NeverMiss-Bukkit-1.2.0.jar`. A pasta `plugins/NeverMiss` (chave e `executadas.txt`) continua a mesma.
+Quem tem o `NeverMiss-1.0.0.jar` ou o `NeverMiss-Bukkit-1.1.0.jar`: apague ele e ponha o `NeverMiss-Bukkit-1.3.0.jar`. A pasta `plugins/NeverMiss` (chave e `executadas.txt`) continua a mesma.
 
 ### Onde a chave pode ficar
 
@@ -93,7 +93,7 @@ O jogador compra **dentro do servidor** o que você vende pela NeverMiss. Ele di
 - **Vence em 15 min.** O plugin confere o pagamento a cada 5 s; vencido, o mapa sai. No 1.15 em diante o chat tem também o **copia e cola** num clique. No máximo 2 Pix abertos por jogador.
 - **Jogador Bedrock (Geyser):** compra no gamertag dele; o produto que não entrega para Bedrock aparece como "Só para o Minecraft Java".
 - **NPC ou menu de outro plugin:** `nevermiss loja <jogador>` no console abre a /loja daquele jogador.
-- **Onde:** Spigot e Paper. O Folia, o Fabric, o Forge, o NeoForge, o PowerNukkitX e os proxies ainda não têm a /loja.
+- **Onde:** Spigot e Paper. Provada num servidor de verdade no Paper 1.20.4 (o jogador abre, escolhe, paga pelo QR do mapa, lido pelo leitor de QR do macOS, e recebe). As outras versões ainda sem a prova da /loja. O Folia, o Fabric, o Forge, o NeoForge, o PowerNukkitX, o BDS e os proxies ainda não têm a /loja.
 
 ## Comandos
 

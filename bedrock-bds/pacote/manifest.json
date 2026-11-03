@@ -4,7 +4,7 @@
     "name": "NeverMiss",
     "description": "Entrega no servidor o que você vende pela NeverMiss (nevermissapps.com).",
     "uuid": "7e641d0b-ac2a-4a7b-a20e-a23ce2ba1080",
-    "version": [1, 2, 0],
+    "version": [1, 3, 0],
     "min_engine_version": [1, 21, 90]
   },
   "modules": [
@@ -12,7 +12,7 @@
       "type": "script",
       "language": "javascript",
       "uuid": "4b243aaa-c498-417e-ad97-32a2c199f055",
-      "version": [1, 2, 0],
+      "version": [1, 3, 0],
       "entry": "scripts/main.js"
     }
   ],
