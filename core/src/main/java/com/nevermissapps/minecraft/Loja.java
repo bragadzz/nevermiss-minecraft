@@ -155,6 +155,9 @@ final class Loja {
         // O QR (tamanho × tamanho módulos), bit a bit em linhas. null fora do "aguardando"
         final int tamanho;
         private final byte[] modulos;
+        // O mapa inteiro já desenhado pela API (128 x 128, o índice da cor de cada pixel): o QR com a logo e as cores da loja.
+        // null = a API velha: o plugin pinta o QR preto e branco dos módulos
+        final byte[] imagem;
 
         Pedido(JsonObject o) {
             numero = Nucleo.texto(o.get("numero"));
@@ -192,6 +195,19 @@ final class Loja {
             }
             tamanho = n;
             modulos = bits;
+            byte[] img = null;
+            String mapa = Nucleo.texto(o.get("mapa"));
+            if (mapa != null) {
+                try {
+                    img = Base64.getDecoder().decode(mapa);
+                } catch (IllegalArgumentException e) {
+                    img = null;
+                }
+                // Os índices 0 a 3 são transparentes: um mapa com eles (ou do tamanho errado) não é o nosso
+                if (img != null && img.length != 128 * 128) img = null;
+                if (img != null) for (byte b : img) if ((b & 0xFF) < 4) { img = null; break; }
+            }
+            imagem = img;
         }
 
         boolean modulo(int linha, int coluna) {
@@ -278,7 +294,7 @@ final class Loja {
     private static Pedido pedido(JsonObject j) throws Erro {
         Pedido p = new Pedido(j);
         if (p.numero == null || !NUMERO.matcher(p.numero).matches() || p.status == null) throw new Erro(FORA);
-        if ("aguardando".equals(p.status) && p.tamanho == 0) throw new Erro(FORA);
+        if ("aguardando".equals(p.status) && p.tamanho == 0 && p.imagem == null) throw new Erro(FORA);
         return p;
     }
 

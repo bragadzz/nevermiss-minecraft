@@ -76,7 +76,7 @@ public final class NeverMiss extends JavaPlugin implements Listener, Jogo {
 
     /** No 1.7.10 o getOnlinePlayers devolve Player[]; do 1.8 em diante, uma Collection. */
     @SuppressWarnings("unchecked")
-    private static Collection<? extends Player> jogadores() {
+    static Collection<? extends Player> jogadores() {
         try {
             Object r = Bukkit.class.getMethod("getOnlinePlayers").invoke(null);
             return r instanceof Player[] ? Arrays.asList((Player[]) r) : (Collection<? extends Player>) r;
@@ -111,7 +111,8 @@ public final class NeverMiss extends JavaPlugin implements Listener, Jogo {
         } else if (command.getName().equalsIgnoreCase("nmloja")) {
             if (!(sender instanceof Player)) sender.sendMessage("[NeverMiss] A /loja é do jogador. Para abrir a de alguém: nevermiss loja <jogador>");
             else if (loja == null) sender.sendMessage("§cA /loja ainda não funciona neste servidor (Folia).");
-            else loja.abrir((Player) sender);
+            // /loja <categoria>: o [Ver na loja] do aviso de compra abre direto no produto
+            else loja.abrir((Player) sender, args.length > 0 ? args[0] : null);
         } else if (sender instanceof Player) {
             laco.kit(sender.getName(), args, texto -> agenda.responder(sender, texto));
         } else {

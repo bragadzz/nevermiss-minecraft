@@ -4,11 +4,15 @@ import net.md_5.bungee.api.chat.ClickEvent;
 import net.md_5.bungee.api.chat.HoverEvent;
 import net.md_5.bungee.api.chat.TextComponent;
 import org.bukkit.Bukkit;
+import org.bukkit.Color;
+import org.bukkit.FireworkEffect;
 import org.bukkit.Material;
+import org.bukkit.entity.Firework;
 import org.bukkit.entity.ItemFrame;
 import org.bukkit.entity.Player;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.Listener;
+import org.bukkit.event.entity.EntityDamageByEntityEvent;
 import org.bukkit.event.entity.PlayerDeathEvent;
 import org.bukkit.event.inventory.InventoryClickEvent;
 import org.bukkit.event.inventory.InventoryDragEvent;
@@ -21,6 +25,7 @@ import org.bukkit.inventory.Inventory;
 import org.bukkit.inventory.InventoryHolder;
 import org.bukkit.inventory.ItemFlag;
 import org.bukkit.inventory.ItemStack;
+import org.bukkit.inventory.meta.FireworkMeta;
 import org.bukkit.inventory.meta.ItemMeta;
 import org.bukkit.map.MapCanvas;
 import org.bukkit.map.MapRenderer;
@@ -46,7 +51,6 @@ final class LojaMenu implements Listener {
     private static final String MAPA = "§aPix · pedido #";
     private static final byte BRANCO = 34;
     private static final byte PRETO = 119;
-    private static final int POR_PAGINA = 45;
 
     private final NeverMiss plugin;
     private final Loja loja;
@@ -64,13 +68,18 @@ final class LojaMenu implements Listener {
         // O item (volta depois da morte) e o desenho (apaga o QR quando fecha, onde quer que o mapa esteja)
         final ItemStack mapa;
         final Qr qr;
+        // Para o aviso no chat de todos: o produto e a categoria que o [Ver na loja] abre
+        final String produto;
+        final String categoria;
 
-        Aberto(String numero, UUID jogador, long vence, ItemStack mapa, Qr qr) {
+        Aberto(String numero, UUID jogador, long vence, ItemStack mapa, Qr qr, String produto, String categoria) {
             this.numero = numero;
             this.jogador = jogador;
             this.vence = vence;
             this.mapa = mapa;
             this.qr = qr;
+            this.produto = produto;
+            this.categoria = categoria;
         }
     }
 
@@ -94,6 +103,11 @@ final class LojaMenu implements Listener {
     // --- /loja ---
 
     void abrir(Player p) {
+        abrir(p, null);
+    }
+
+    /** categoria: o id do produto (o painel de venda) que já abre na vitrine, como o [Ver na loja] do aviso de compra. */
+    void abrir(Player p, String categoria) {
         avisar(p, "§7Abrindo a loja...");
         assincrono(() -> {
             Loja.Catalogo c;
@@ -113,60 +127,70 @@ final class LojaMenu implements Listener {
                         plugin.log("A /loja está vazia. Fora dela: " + String.join(" · ", c.fora));
                         if (p.hasPermission("nevermiss.admin")) for (String f : c.fora) avisar(p, "§8(op) §7" + f);
                     }
-                } else produtos(p, c, 0);
+                } else {
+                    int cat = 0;
+                    for (int i = 0; i < c.produtos.size(); i++) if (c.produtos.get(i).id.equals(categoria)) cat = i;
+                    vitrine(p, c, cat, 0);
+                }
             });
         });
     }
 
-    private void produtos(Player p, Loja.Catalogo c, int pagina) {
-        int total = c.produtos.size();
-        int paginas = (total + POR_PAGINA - 1) / POR_PAGINA;
-        int inicio = pagina * POR_PAGINA;
-        int aqui = Math.min(POR_PAGINA, total - inicio);
-        int linhas = (aqui + 8) / 9 + (paginas > 1 ? 1 : 0);
-        Tela t = tela(linhas, c.nome == null ? "Loja" : "Loja · " + c.nome);
-        for (int i = 0; i < aqui; i++) {
-            Loja.Produto pr = c.produtos.get(inicio + i);
-            List<String> lore = new ArrayList<>();
-            if (pr.esgotado()) lore.add("§cEsgotado");
-            else lore.add((pr.aPartirDe() ? "§7a partir de " : "") + preco(pr.menor()));
-            lore.addAll(cinza(pr.descricao));
-            lore.add("");
-            lore.add(pr.esgotado() ? "§8Volte mais tarde" : "§eClique para comprar");
-            por(t, i, item(pr.icone, 1, (pr.esgotado() ? "§c" : "§a") + pr.nome, lore), () -> {
-                if (pr.variacoes.size() == 1) confirmar(p, c, pr, pr.variacoes.get(0), pr.variacoes.get(0).min, pagina);
-                else variacoes(p, c, pr, pagina);
-            });
-        }
-        if (paginas > 1) {
-            int base = (linhas - 1) * 9;
-            if (pagina > 0) por(t, base + 3, botao("arrow", "ARROW", "§fPágina anterior"), () -> produtos(p, c, pagina - 1));
-            por(t, base + 4, botao("paper", "PAPER", "§7Página " + (pagina + 1) + " de " + paginas), null);
-            if (pagina < paginas - 1) por(t, base + 5, botao("arrow", "ARROW", "§fPróxima página"), () -> produtos(p, c, pagina + 1));
-        }
-        p.openInventory(t.inv);
-    }
+    // A vitrine (baú de 6 linhas): em cima as categorias (os painéis de venda do bot), com o vidro verde embaixo da aberta e o "Como
+    // comprar" no canto; no meio os produtos dela, 7 por linha em 2 linhas, longe das bordas; embaixo, as páginas
+    private static final int[] VITRINE = {28, 29, 30, 31, 32, 33, 34, 37, 38, 39, 40, 41, 42, 43};
+    private static final int ABAS = 7;
 
-    private void variacoes(Player p, Loja.Catalogo c, Loja.Produto pr, int pagina) {
-        int n = pr.variacoes.size();
-        Tela t = tela((n + 8) / 9 + 1, pr.nome);
+    private void vitrine(Player p, Loja.Catalogo c, int cat, int pagina) {
+        int nCat = c.produtos.size();
+        int abaInicio = (cat / ABAS) * ABAS;
+        Loja.Produto pr = c.produtos.get(cat);
+        Tela t = tela(6, "Loja: " + pr.nome);
+        for (int i = 0; i < ABAS && abaInicio + i < nCat; i++) {
+            int idx = abaInicio + i;
+            Loja.Produto x = c.produtos.get(idx);
+            boolean aberta = idx == cat;
+            List<String> lore = new ArrayList<>();
+            lore.add(x.esgotado() ? "§cEsgotado" : (x.aPartirDe() ? "§7a partir de " : "") + preco(x.menor()));
+            lore.add("§7" + x.variacoes.size() + (x.variacoes.size() == 1 ? " produto" : " produtos"));
+            lore.addAll(cinza(x.descricao));
+            lore.add("");
+            lore.add(aberta ? "§aAberta" : "§eClique para ver");
+            por(t, 1 + i, item(x.icone, 1, (aberta ? "§a" : "§f") + x.nome, lore), aberta ? null : () -> vitrine(p, c, idx, 0));
+            if (aberta) por(t, 10 + i, item(Kit.icone("lime_stained_glass_pane", "STAINED_GLASS_PANE:5"), 1, "§a" + x.nome, Collections.<String>emptyList()), null);
+        }
+        if (abaInicio > 0) por(t, 0, botao("arrow", "ARROW", "§fCategorias anteriores"), () -> vitrine(p, c, abaInicio - 1, 0));
+        if (abaInicio + ABAS < nCat) por(t, 8, botao("arrow", "ARROW", "§fMais categorias"), () -> vitrine(p, c, abaInicio + ABAS, 0));
+        else {
+            por(t, 8, item(Kit.icone("book", "BOOK"), 1, "§eComo comprar", Arrays.asList("§7Escolha o produto e a quantidade", "§7e pague com Pix: o QR Code", "§7aparece num mapa na sua mão.")), null);
+        }
         boolean bedrock = gamertag(p) != null;
-        for (int i = 0; i < n; i++) {
-            Loja.Variacao v = pr.variacoes.get(i);
+        int paginas = Math.max(1, (pr.variacoes.size() + VITRINE.length - 1) / VITRINE.length);
+        int pag = Math.max(0, Math.min(pagina, paginas - 1));
+        for (int i = 0; i < VITRINE.length; i++) {
+            int idx = pag * VITRINE.length + i;
+            if (idx >= pr.variacoes.size()) break;
+            Loja.Variacao v = pr.variacoes.get(idx);
             List<String> lore = new ArrayList<>();
             lore.add(v.esgotado ? "§cEsgotado" : preco(v.gratis ? 0 : v.preco) + de(v));
             if (v.restam >= 0 && !v.esgotado) lore.add("§7Restam " + v.restam);
+            if (v.equipe) lore.add("§7A equipe entrega depois do pagamento");
             lore.addAll(cinza(v.descricao));
             lore.add("");
             lore.add(v.esgotado ? "§8Volte mais tarde" : bedrock && !v.bedrock ? "§cSó para o Minecraft Java" : "§eClique para comprar");
-            por(t, i, item(v.icone, 1, (v.esgotado ? "§c" : "§a") + v.nome, lore), () -> confirmar(p, c, pr, v, v.min, pagina));
+            por(t, VITRINE[i], item(v.icone, 1, (v.esgotado ? "§c" : "§a") + v.nome, lore), () -> confirmar(p, c, cat, v, v.min, pag));
         }
-        por(t, ((n + 8) / 9) * 9, botao("arrow", "ARROW", "§fVoltar"), () -> produtos(p, c, pagina));
+        if (paginas > 1) {
+            if (pag > 0) por(t, 48, botao("arrow", "ARROW", "§fPágina anterior"), () -> vitrine(p, c, cat, pag - 1));
+            por(t, 49, botao("paper", "PAPER", "§7Página " + (pag + 1) + " de " + paginas), null);
+            if (pag < paginas - 1) por(t, 50, botao("arrow", "ARROW", "§fPróxima página"), () -> vitrine(p, c, cat, pag + 1));
+        }
         p.openInventory(t.inv);
     }
 
     /** A quantidade e o botão de pagar. Mudar a quantidade monta a tela de novo. */
-    private void confirmar(Player p, Loja.Catalogo c, Loja.Produto pr, Loja.Variacao v, int qtd, int pagina) {
+    private void confirmar(Player p, Loja.Catalogo c, int cat, Loja.Variacao v, int qtd, int pagina) {
+        Loja.Produto pr = c.produtos.get(cat);
         if (v.esgotado) {
             avisar(p, "§c" + v.nome + " está esgotado.");
             return;
@@ -193,13 +217,10 @@ final class LojaMenu implements Listener {
                 String antiga = s[1] < 0 ? "STAINED_GLASS_PANE:14" : "STAINED_GLASS_PANE:5";
                 ItemStack b = item(Kit.icone(cor, antiga), Math.abs(s[1]), (s[1] < 0 ? "§c" : "§a") + (s[1] < 0 ? "" : "+") + s[1],
                         Collections.singletonList("§7Fica " + nova));
-                por(t, s[0], b, () -> confirmar(p, c, pr, v, nova, pagina));
+                por(t, s[0], b, () -> confirmar(p, c, cat, v, nova, pagina));
             }
         }
-        por(t, 18, botao("arrow", "ARROW", "§fVoltar"), () -> {
-            if (pr.variacoes.size() == 1) produtos(p, c, pagina);
-            else variacoes(p, c, pr, pagina);
-        });
+        por(t, 18, botao("arrow", "ARROW", "§fVoltar"), () -> vitrine(p, c, cat, pagina));
         if (bedrock && !v.bedrock) {
             por(t, 22, item(Kit.icone("barrier", "BARRIER"), 1, "§cSó para o Minecraft Java",
                     Collections.singletonList("§7Este produto não entrega para jogador Bedrock.")), null);
@@ -249,8 +270,9 @@ final class LojaMenu implements Listener {
                     avisar(p, "§aResgatado! " + v.nome + (ped.equipe ? ": a equipe do servidor entrega em breve" : " chega em instantes") + " (pedido #" + ped.numero + ").");
                     for (String l : ped.mensagem) avisar(p, "§f" + l);
                     som(p);
+                    comemorar(p, v.nome, pr.id, "resgatou");
                 } else if ("aguardando".equals(ped.status)) {
-                    entregarMapa(p, v, ped);
+                    entregarMapa(p, pr, v, ped);
                 } else {
                     avisar(p, "§c" + (ped.aviso != null ? ped.aviso : "Este pedido não está mais aberto (pedido #" + ped.numero + ")."));
                 }
@@ -274,7 +296,7 @@ final class LojaMenu implements Listener {
         }
     }
 
-    private void entregarMapa(Player p, Loja.Variacao v, Loja.Pedido ped) {
+    private void entregarMapa(Player p, Loja.Produto pr, Loja.Variacao v, Loja.Pedido ped) {
         ItemStack mapa;
         Qr qr = new Qr(ped);
         try {
@@ -302,7 +324,7 @@ final class LojaMenu implements Listener {
             }
         }
         long vence = ped.expiraEm > 0 ? ped.expiraEm : System.currentTimeMillis() + 15 * 60_000L;
-        abertos.put(ped.numero, new Aberto(ped.numero, p.getUniqueId(), vence, mapa.clone(), qr));
+        abertos.put(ped.numero, new Aberto(ped.numero, p.getUniqueId(), vence, mapa.clone(), qr, v.nome, pr.id));
         avisar(p, "§fPix de " + preco(ped.total) + " §fgerado: pedido §e#" + ped.numero + "§f.");
         avisar(p, "§7Segure o mapa e leia o QR Code com o app do banco. Vence em 15 min.");
         if (ped.recebedor != null) avisar(p, "§7Recebedor: §f" + ped.recebedor);
@@ -376,6 +398,10 @@ final class LojaMenu implements Listener {
             }
             if (feito) return;
             feito = true;
+            if (ped.imagem != null) {
+                for (int y = 0; y < 128; y++) for (int x = 0; x < 128; x++) canvas.setPixel(x, y, ped.imagem[y * 128 + x]);
+                return;
+            }
             int n = ped.tamanho;
             int px = Math.max(1, 128 / (n + 2));
             int margem = (128 - n * px) / 2;
@@ -415,6 +441,7 @@ final class LojaMenu implements Listener {
                     Player p = Bukkit.getPlayer(a.jogador);
                     fechar(a, "§aPagamento aprovado! Pedido #" + a.numero + (ped.equipe ? ": a equipe do servidor entrega em breve." : ": a entrega chega em instantes."));
                     if (p != null) for (String l : ped.mensagem) avisar(p, "§f" + l);
+                    if (p != null) comemorar(p, a.produto, a.categoria, "comprou");
                 });
             }
             else if ("vencido".equals(ped.status)) principal(() -> fechar(a, "§cO Pix do pedido #" + a.numero + " venceu. Abra a /loja para gerar outro."));
@@ -434,6 +461,57 @@ final class LojaMenu implements Listener {
         tirarMapas(p, Collections.singleton(a.numero));
         avisar(p, msg);
         if (msg.startsWith("§a")) som(p);
+    }
+
+    // --- A compra aprovada: fogos para quem comprou e o aviso no chat de todos, com o [Ver na loja] ---
+
+    private final Set<UUID> fogos = ConcurrentHashMap.newKeySet();
+    private static final Color[] CORES = {Color.LIME, Color.AQUA, Color.YELLOW, Color.FUCHSIA, Color.ORANGE, Color.WHITE};
+
+    private void comemorar(Player p, String produto, String categoria, String verbo) {
+        titulo(p, "§aPagamento aprovado!", "§f" + produto);
+        java.util.Random r = new java.util.Random();
+        for (int i = 0; i < 3; i++) {
+            final int n = i;
+            Bukkit.getScheduler().runTaskLater(plugin, () -> {
+                if (!p.isOnline()) return;
+                Firework f = p.getWorld().spawn(p.getLocation().add(r.nextDouble() * 4 - 2, 1, r.nextDouble() * 4 - 2), Firework.class);
+                FireworkMeta meta = f.getFireworkMeta();
+                meta.addEffect(FireworkEffect.builder().with(n == 1 ? FireworkEffect.Type.STAR : FireworkEffect.Type.BALL_LARGE)
+                        .withColor(CORES[r.nextInt(CORES.length)], CORES[r.nextInt(CORES.length)]).withFade(Color.WHITE).flicker(true).trail(true).build());
+                meta.setPower(0);
+                f.setFireworkMeta(meta);
+                fogos.add(f.getUniqueId());
+                Bukkit.getScheduler().runTaskLater(plugin, () -> fogos.remove(f.getUniqueId()), 100);
+            }, i * 12L);
+        }
+        String nome = p.getName();
+        String texto = "§6§l★ §e" + nome + " §7" + verbo + " §a§l" + produto + " §7na /loja! ";
+        try {
+            TextComponent linha = new TextComponent(texto);
+            TextComponent ver = new TextComponent("§b§n[Ver na loja]");
+            ver.setClickEvent(new ClickEvent(ClickEvent.Action.RUN_COMMAND, "/nmloja " + categoria));
+            ver.setHoverEvent(new HoverEvent(HoverEvent.Action.SHOW_TEXT, new TextComponent[]{new TextComponent("Abrir a /loja em " + produto)}));
+            linha.addExtra(ver);
+            for (Player x : NeverMiss.jogadores()) x.spigot().sendMessage(linha);
+        } catch (RuntimeException | LinkageError semChat) {
+            for (Player x : NeverMiss.jogadores()) x.sendMessage(texto + "§7(/loja)");
+        }
+    }
+
+    /** Os fogos da compra não machucam ninguém. */
+    @EventHandler
+    public void fogos(EntityDamageByEntityEvent e) {
+        if (e.getDamager() instanceof Firework && fogos.contains(e.getDamager().getUniqueId())) e.setCancelled(true);
+    }
+
+    @SuppressWarnings("deprecation")
+    private static void titulo(Player p, String titulo, String sub) {
+        try {
+            p.sendTitle(titulo, sub);
+        } catch (RuntimeException | LinkageError semTitulo) {
+            // servidor sem título (1.7.10): fica o chat
+        }
     }
 
     /** Entrou: os mapas de pedido que acabaram (ou que ficaram de antes de o servidor reiniciar) saem. */
