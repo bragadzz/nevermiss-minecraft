@@ -232,7 +232,7 @@ echo "queda: $QUEDA"
 # 11) O que nunca pode acontecer.
 noLog "Teste do painel recebido" || falha "teste do painel não apareceu"
 noLog "o {uuid} não existe no BDS" || falha "o motivo do {uuid} não apareceu no console"
-vm "grep -rlF -- $CHAVE ~/bds --exclude-dir=config" && falha "a chave apareceu fora do secrets.json (log ou mundo)"
+vm "grep -rlF --exclude-dir=config -- $CHAVE ~/bds" && falha "a chave apareceu fora do secrets.json (log ou mundo)"
 desligar
 echo "BDS: $(vm "grep -m1 -oE 'Version:? [0-9.]+' ~/bds/saida.log" || echo '?') · $BETA · $PERM · say: $SAY · queda: $QUEDA"
 echo "TUDO OK (BDS)"
