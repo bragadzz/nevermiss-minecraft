@@ -366,6 +366,20 @@ log, versao, macas, capacetes = open(sys.argv[1], encoding="utf-8", errors="repl
 v = [int(x) for x in (versao.split(".") + ["0"])[:3]]
 def tem(padrao):
     assert re.search(padrao, log, re.S), padrao
+# O composto {...} que abre em texto[i], com os de dentro (a armadura gasta ganha components: {"minecraft:damage": 1})
+def bloco(texto, i):
+    nivel = 0
+    for j in range(i, len(texto)):
+        nivel += {"{": 1, "}": -1}.get(texto[j], 0)
+        if nivel == 0:
+            return texto[i:j + 1]
+    return texto[i:]
+# Cada item da lista do "data get" (o Paper escreve Slot antes do id; o Fabric e o Forge, em outra ordem)
+def tem_item(slot, item):
+    assert any(re.search(r"\bSlot: %db\b" % slot, c) and 'id: "minecraft:%s"' % item in c
+               for m in re.finditer(r"[\[,] \{|\[\{", log) for c in [bloco(log, m.end() - 1)]), (slot, item)
+def tem_equip(slot, item):
+    assert any('id: "minecraft:%s"' % item in bloco(log, m.end() - 1) for m in re.finditer(r"\b%s: \{" % slot, log)), (slot, item)
 if v < [1, 13, 0]:
     tem(r"Found Kiteiro")
     tem(r"Kiteiro has %s items" % macas)
@@ -373,12 +387,12 @@ if v < [1, 13, 0]:
 else:
     if v < [1, 21, 5]:
         for slot, peca in ((100, "boots"), (101, "leggings"), (102, "chestplate"), (103, "helmet")):
-            tem(r'Slot: %db, id: "minecraft:diamond_%s"' % (slot, peca))
-        tem(r'Slot: 0b, id: "minecraft:diamond_sword"')
+            tem_item(slot, "diamond_" + peca)
+        tem_item(0, "diamond_sword")
     else:
         for slot, peca in (("feet", "boots"), ("legs", "leggings"), ("chest", "chestplate"), ("head", "helmet")):
-            tem(r'%s: \{[^}]*id: "minecraft:diamond_%s"' % (slot, peca))
-    tem(r'"minecraft:sharpness"' + (r"\W+5" if v >= [1, 20, 5] else r", lvl: 5s"))
+            tem_equip(slot, "diamond_" + peca)
+    tem(r'"minecraft:sharpness"\W+5' if v >= [1, 20, 5] else r'id: "minecraft:sharpness", lvl: 5s|lvl: 5s, id: "minecraft:sharpness"')
     tem(r"mina VIP")
     tem(r"Found %s matching item.{0,4} on player Kiteiro" % macas)
     tem(r"Found %s matching item.{0,4} on player Kiteiro" % capacetes)
@@ -432,6 +446,71 @@ JSON
   noLog "6000 itens, e o máximo numa entrega é 1000" || falha "o console não explicou o kit grande demais"
   [ "$(grep -c 'Kit VIP Diamante para ' "$DIR/saida.log")" = 1 ] || falha "um kit recusado deu itens"
   echo "Kit e /kit: ok"
+fi
+
+# 8) A /loja (contrato, 18), com um jogador de verdade: abre o menu, escolhe o VIP Ouro, sobe para 2 unidades e paga. O Pix vem
+#    num mapa na mão: os pixels que o jogador recebeu passam pelo leitor de QR do macOS (teste/lerqr.swift) e têm que dar o copia
+#    e cola da API. Pago, o mapa sai e a entrega chega pela fila. Depois: a variação esgotada recusa e o Pix que vence tira o mapa.
+#    Só no Spigot e no Paper (o Folia ainda não abre o menu); o cliente falso não tem os pacotes de menu do 1.7.10.
+LOJA=
+if [ "$JAR" = bukkit ] && [ "$PLATAFORMA" != folia ] && [ "$VERSAO" != 1.7.10 ]; then LOJA=1; fi
+if [ -n "$LOJA" ]; then
+  janela() { # janela <nick> <texto> <vezes> <segundos>: o menu abriu N vezes com esse título
+    for _ in $(seq "$4"); do [ "$(grep -c -- "JANELA .*$2" "$DIR/$1.log")" -ge "$3" ] && return 0; sleep 1; done
+    falha "o menu '$2' não abriu para $1 ($3 vez(es)): $(tail -5 "$DIR/$1.log")"
+  }
+  temMapa() { # temMapa <nick> <0|1>: quantos mapas cheios o jogador tem, pelo próprio jogo
+    MARCA=$(wc -l < "$DIR/saida.log")
+    if antigo "$VERSAO"; then console "clear $1 minecraft:filled_map -1 0"; else console "clear $1 minecraft:filled_map 0"; fi
+    sleep 2
+    tail -n +"$((MARCA + 1))" "$DIR/saida.log" > "$DIR/mapa.txt"
+    if [ "$2" = 1 ]; then grep -qE "Found 1 matching item|$1 has 1 items" "$DIR/mapa.txt" || falha "$1 não tem o mapa do Pix: $(cat "$DIR/mapa.txt")"
+    else grep -qE "No items were found|no items to remove" "$DIR/mapa.txt" || falha "o mapa do Pix ficou com $1: $(cat "$DIR/mapa.txt")"; fi
+  }
+  mkdir -p "$DIR/mapas" && rm -f "$DIR/mapas/"*
+  NM_MAPAS="$DIR/mapas" jogador Comprador 7
+  echo "loja" >&7
+  janela Comprador "Loja . Teste" 1 20
+  echo "@clicar 0" >&7
+  janela Comprador "VIP Ouro" 1 10
+  echo "@clicar 15" >&7
+  janela Comprador "VIP Ouro" 2 10
+  echo "@clicar 22" >&7
+  chat Comprador "Gerando o Pix" 1 10
+  chat Comprador "Pix de .*39,80 .*gerado: pedido #T00001" 1 20
+  for _ in $(seq 20); do grep -q '^MAPA ' "$DIR/Comprador.log" && break; sleep 1; done
+  MAPA=$(grep '^MAPA ' "$DIR/Comprador.log" | tail -1 | cut -d' ' -f3)
+  [ -f "$MAPA" ] || falha "o jogador não recebeu os pixels do mapa: $(tail -5 "$DIR/Comprador.log")"
+  sleep 2
+  LIDO=$(swift "$RAIZ/teste/lerqr.swift" "$MAPA" "$DIR/mapas/qr.png") || falha "o leitor de QR não leu o mapa ($DIR/mapas/qr.png)"
+  ESPERADO=$(sed -n 's/.*String COPIA_COLA = "\([^"]*\)".*/\1/p' "$RAIZ/core/src/test/java/com/nevermissapps/minecraft/ApiFalsa.java")
+  [ "$LIDO" = "$ESPERADO" ] || falha "o QR do mapa leu '$LIDO', esperava o copia e cola da API"
+  temMapa Comprador 1
+  curl -fsS "$API/teste/estado" | python3 -c 'import json,sys; p=json.load(sys.stdin)["loja"][0]; assert (p["nick"], p["qtd"], p["edicao"], p["variacao"]) == ("Comprador", 2, "java", "vip-30"), p' ||
+    falha "o pedido da /loja não foi o que o jogador escolheu"
+  curl -fsS -X POST "$API/teste/pagar" -d '{"numero":"T00001"}' >/dev/null
+  chat Comprador "Pagamento aprovado! Pedido #T00001" 1 20
+  espera loja-T00001 "entregue" 40
+  temMapa Comprador 0
+  if antigo "$VERSAO"; then console "scoreboard players list Comprador"; sleep 2; noLog 'vip: 2' || falha "o placar do Comprador não é 2"
+  else console "scoreboard players get Comprador vip"; sleep 2; noLog 'Comprador has 2 \[vip\]' || falha "o placar do Comprador não é 2"; fi
+  # A Chave lendária esgotada recusa; a Chave rara gera outro Pix, que vence e tira o mapa
+  echo "loja" >&7
+  janela Comprador "Loja . Teste" 2 20
+  echo "@clicar 1" >&7
+  janela Comprador "Chaves" 1 10
+  echo "@clicar 1" >&7
+  chat Comprador "Chave lendaria está esgotado" 1 10
+  sleep 1 # o menu ignora o 2º clique em menos de 250 ms
+  echo "@clicar 0" >&7
+  janela Comprador "Chaves . Chave rara" 1 10
+  echo "@clicar 22" >&7
+  chat Comprador "gerado: pedido #T00002" 1 20
+  temMapa Comprador 1
+  curl -fsS -X POST "$API/teste/vencer" -d '{"numero":"T00002"}' >/dev/null
+  chat Comprador "O Pix do pedido #T00002 venceu" 1 20
+  temMapa Comprador 0
+  echo "/loja: ok"
 fi
 
 console "nevermiss status"

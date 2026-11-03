@@ -179,6 +179,15 @@ final class Kit {
                 Collections.unmodifiableList(descricao));
     }
 
+    /** Um item só para mostrar (o ícone da /loja, os botões do menu), resolvido como a peça do kit. Fora do formato: o baú. */
+    static Item icone(String item, String legado) {
+        Matcher m = legado == null ? null : LEGADO.matcher(legado);
+        boolean temLegado = m != null && m.matches();
+        if (item == null || !ITEM.matcher(item).matches()) return new Item(0, "chest", "CHEST", 0, 1, Collections.emptyList(), null, Collections.emptyList());
+        return new Item(0, item, temLegado ? m.group(1) : null, temLegado && m.group(2) != null ? Integer.parseInt(m.group(2)) : 0, 1,
+                Collections.emptyList(), null, Collections.emptyList());
+    }
+
     private static String limpo(String texto, int max) {
         if (texto == null) return null;
         String t = CONTROLE.matcher(texto).replaceAll("").trim();

@@ -22,6 +22,7 @@ final class Laco {
     private final Registro registro;
     private final Resgates resgates;
     final Nucleo nucleo;
+    final Loja loja;
     private final AtomicBoolean emCiclo = new AtomicBoolean();
     private volatile boolean deNovo;
     private volatile boolean ligado = true;
@@ -33,6 +34,7 @@ final class Laco {
         registro = new Registro(new File(pasta, "executadas.txt"));
         resgates = new Resgates(new File(pasta, "resgates.txt"));
         nucleo = new Nucleo(jogo, registro, resgates, versao);
+        loja = new Loja(nucleo);
         config = new File(pasta, "config.yml");
         if (!config.exists()) {
             // Ao lado da classe, não na raiz: o loader do Velocity e do BungeeCord procura primeiro no proxy.

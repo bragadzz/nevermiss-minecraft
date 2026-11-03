@@ -26,7 +26,9 @@ import java.util.Set;
  * Imita as rotas do plugin na API da NeverMiss (contrato, seção 4): fila com lease,
  * confirmação idempotente, só online, limites e erros. Usada nos testes e no teste/e2e.sh.
  *
- * Rotas de controle (só para teste): POST /teste/entregas, GET /teste/estado e POST /teste/cortar.
+ * Rotas de controle (só para teste): POST /teste/entregas, GET /teste/estado, POST /teste/cortar e, da /loja (contrato, 18),
+ * POST /teste/pagar {numero} (o Pix pago vira a entrega "loja-<numero>": scoreboard players add <nick> vip <qtd>) e
+ * POST /teste/vencer {numero}.
  */
 public final class ApiFalsa implements AutoCloseable {
     private static final Set<String> MOTIVOS = new HashSet<>(Arrays.asList(
@@ -49,6 +51,21 @@ public final class ApiFalsa implements AutoCloseable {
     String minima = "1.0.0";
     int cortar;
     private long ultimaConsulta;
+    // A /loja: o Pix de teste e o QR dele (o mesmo do qrcode da API, correção M, 49 x 49)
+    static final String COPIA_COLA = "00020101021226870014br.gov.bcb.pix2565pix.yuvexpay.com/qr/v2/cobv/5e1d0c0e-7f1a-4d7b-9a51-2f0c9a3b8d11520400005303986540519.905802BR5914NEVERMISS TESTE6009SAO PAULO62070503***63041D3A";
+    static final String QR = "/uNZYeS/wQXPwePQbpieydZrt1jslYIl263AfrCC7BZNkeoRB/qqqqqq/gHQ/FvaAIuF3+lAfMavRCXKCLe4vDoh4+eFr+WxK694mqhae8mnL8LgpmS+ZU/cFyWZi0yvODJ3stRAlxLuHv9iyADWot/f5iRGo1iFFirGdzjsLq2ihJzXTDF6/lLP6F/+cUUMXpUaSquiq2CtdFFpFY9Fq/Wa/o0/Xx1IGWlSoSy/rLwjxGvCJ1Wkh4whtFjd7MgldvUPxL8Xn/ApiZLAssHNCj2io2Ney/GPPHhNVv/t2FY8tgMHtqOccq0ZjuxAMcbiutsLVE/iK+PnYv+AW+8Qm0W/ud+sKWvQQ7XFeTGrrIy+NK/V0lbrhbQG6OtO2ZEVBHWOMJec/vZB0udWgA==";
+    JsonObject catalogo = JsonParser.parseString("{\"aberta\":true,\"nome\":\"Teste\",\"produtos\":["
+            + "{\"id\":\"vip\",\"nome\":\"VIP Ouro\",\"descricao\":\"Tag dourada, kit diario e /fly no lobby por 30 dias.\",\"icone\":{\"item\":\"gold_ingot\",\"legado\":\"GOLD_INGOT\"},"
+            + "\"variacoes\":[{\"id\":\"vip-30\",\"nome\":\"VIP Ouro\",\"descricao\":\"\",\"preco\":19.9,\"min\":1,\"max\":5,\"esgotado\":false,\"restam\":null,\"gratis\":false,\"bedrock\":true,\"desconto\":{\"aPartirDe\":3,\"pct\":10},"
+            + "\"icone\":{\"item\":\"gold_ingot\",\"legado\":\"GOLD_INGOT\"}}]},"
+            + "{\"id\":\"chaves\",\"nome\":\"Chaves\",\"descricao\":\"\",\"icone\":{\"item\":\"tripwire_hook\",\"legado\":\"TRIPWIRE_HOOK\"},"
+            + "\"variacoes\":[{\"id\":\"chave-rara\",\"nome\":\"Chave rara\",\"preco\":4.5,\"min\":1,\"max\":1,\"esgotado\":false,\"gratis\":false,\"bedrock\":true,"
+            + "\"icone\":{\"item\":\"tripwire_hook\",\"legado\":\"TRIPWIRE_HOOK\"}},"
+            + "{\"id\":\"chave-lendaria\",\"nome\":\"Chave lendaria\",\"preco\":9,\"min\":1,\"max\":1,\"esgotado\":true,\"gratis\":false,\"bedrock\":true,"
+            + "\"icone\":{\"item\":\"tripwire_hook\",\"legado\":\"TRIPWIRE_HOOK\"}}]}]}").getAsJsonObject();
+    final Map<String, JsonObject> pedidosLoja = new LinkedHashMap<>();
+    // Os pedidos que o plugin criou, na ordem (o e2e lê o último)
+    final List<String> numerosLoja = new ArrayList<>();
 
     static final class Entrega {
         String id, nick, evento = "entrega", estado = "pendente", motivo, edicaoJogador = "java";
@@ -109,6 +126,14 @@ public final class ApiFalsa implements AutoCloseable {
                 confirmar(x, corpo);
             } else if (caminho.equals("/v1/minecraft/kits")) {
                 kits(x, corpo);
+            } else if (caminho.equals("/v1/minecraft/loja")) {
+                responder(x, 200, catalogo);
+            } else if (caminho.equals("/v1/minecraft/loja/pedidos")) {
+                comprar(x, corpo);
+            } else if (caminho.startsWith("/v1/minecraft/loja/pedidos/")) {
+                JsonObject p = pedidosLoja.get(caminho.substring("/v1/minecraft/loja/pedidos/".length()));
+                if (p == null) responder(x, 404, erro("Pedido não encontrado", "pedido"));
+                else responder(x, 200, pedidoLoja(p));
             } else {
                 responder(x, 404, erro("Não existe", "rota"));
             }
@@ -255,8 +280,57 @@ public final class ApiFalsa implements AutoCloseable {
         responder(x, 200, r);
     }
 
+    private void comprar(HttpExchange x, JsonObject corpo) throws IOException {
+        String chave = corpo.get("chave").getAsString();
+        for (JsonObject p : pedidosLoja.values()) {
+            if (chave.equals(p.get("chave").getAsString())) {
+                responder(x, 201, pedidoLoja(p));
+                return;
+            }
+        }
+        JsonObject p = new JsonObject();
+        String numero = String.format("T%05d", pedidosLoja.size() + 1);
+        p.addProperty("numero", numero);
+        p.addProperty("status", "aguardando");
+        p.add("chave", corpo.get("chave"));
+        p.add("nick", corpo.get("nick"));
+        p.add("edicao", corpo.get("edicao"));
+        p.add("variacao", corpo.get("variacao"));
+        p.add("qtd", corpo.get("qtd"));
+        p.addProperty("total", 19.9 * corpo.get("qtd").getAsInt());
+        pedidosLoja.put(numero, p);
+        numerosLoja.add(numero);
+        responder(x, 201, pedidoLoja(p));
+    }
+
+    private static JsonObject pedidoLoja(JsonObject p) {
+        JsonObject o = new JsonObject();
+        o.add("numero", p.get("numero"));
+        o.add("status", p.get("status"));
+        o.add("total", p.get("total"));
+        o.addProperty("gratis", false);
+        boolean aberto = "aguardando".equals(p.get("status").getAsString());
+        o.addProperty("expiraEm", aberto ? java.time.Instant.now().plusSeconds(900).toString() : null);
+        o.addProperty("copiaCola", aberto ? COPIA_COLA : null);
+        if (aberto) {
+            JsonObject qr = new JsonObject();
+            qr.addProperty("tamanho", 49);
+            qr.addProperty("modulos", QR);
+            o.add("qr", qr);
+        }
+        o.addProperty("recebedor", aberto ? "NEVERMISS TESTE" : null);
+        return o;
+    }
+
     private void controle(HttpExchange x, String caminho, JsonObject corpo) throws IOException {
-        if (caminho.equals("/teste/entregas")) {
+        if (caminho.equals("/teste/pagar") || caminho.equals("/teste/vencer")) {
+            JsonObject p = pedidosLoja.get(corpo.get("numero").getAsString());
+            boolean pagar = caminho.equals("/teste/pagar");
+            p.addProperty("status", pagar ? "pago" : "vencido");
+            if (pagar) adicionar("loja-" + p.get("numero").getAsString(), p.get("nick").getAsString(), false,
+                    "scoreboard players add " + p.get("nick").getAsString() + " vip " + p.get("qtd").getAsInt());
+            responder(x, 200, new JsonObject());
+        } else if (caminho.equals("/teste/entregas")) {
             Entrega e = adicionar(corpo.get("id").getAsString(),
                     corpo.has("nick") ? corpo.get("nick").getAsString() : null,
                     corpo.has("soOnline") && corpo.get("soOnline").getAsBoolean());
@@ -283,6 +357,9 @@ public final class ApiFalsa implements AutoCloseable {
             r.addProperty("pulls", pulls.size());
             r.add("ultimoPull", pulls.isEmpty() ? null : pulls.get(pulls.size() - 1).get("servidor"));
             r.add("recursos", pulls.isEmpty() ? null : pulls.get(pulls.size() - 1).get("recursos"));
+            JsonArray loja = new JsonArray();
+            for (String n : numerosLoja) loja.add(pedidosLoja.get(n));
+            r.add("loja", loja);
             responder(x, 200, r);
         }
     }

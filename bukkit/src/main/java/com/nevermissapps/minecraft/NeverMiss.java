@@ -33,6 +33,8 @@ public final class NeverMiss extends JavaPlugin implements Listener, Jogo {
     private Agenda agenda;
     private Bedrock bedrock;
     private Laco laco;
+    // null no Folia: o menu teria que abrir na região do jogador
+    private LojaMenu loja;
     // null no Folia: lá o kit ainda não sai (o comando do jogador tem que rodar na região dele)
     private int[] versao;
     private Method chaveMinecraft;
@@ -60,6 +62,10 @@ public final class NeverMiss extends JavaPlugin implements Listener, Jogo {
         }
         for (Player p : jogadores()) online.add(p.getName().toLowerCase(Locale.ROOT));
         getServer().getPluginManager().registerEvents(this, this);
+        if (!agenda.folia) {
+            loja = new LojaMenu(this, laco.loja);
+            getServer().getPluginManager().registerEvents(loja, this);
+        }
         laco.configurar();
     }
 
@@ -94,8 +100,18 @@ public final class NeverMiss extends JavaPlugin implements Listener, Jogo {
 
     @Override
     public boolean onCommand(CommandSender sender, Command command, String label, String[] args) {
-        if (command.getName().equalsIgnoreCase("nevermiss")) {
+        if (command.getName().equalsIgnoreCase("nevermiss") && args.length == 2 && args[0].equalsIgnoreCase("loja")) {
+            // Para o NPC ou o menu de outro plugin abrir a /loja de um jogador (pelo console)
+            Player p = Bukkit.getPlayerExact(args[1]);
+            if (loja == null) sender.sendMessage("[NeverMiss] A /loja ainda não funciona no Folia.");
+            else if (p == null) sender.sendMessage("[NeverMiss] " + args[1] + " não está online.");
+            else loja.abrir(p);
+        } else if (command.getName().equalsIgnoreCase("nevermiss")) {
             laco.comando(args, sender instanceof ConsoleCommandSender, texto -> agenda.responder(sender, texto));
+        } else if (command.getName().equalsIgnoreCase("loja")) {
+            if (!(sender instanceof Player)) sender.sendMessage("[NeverMiss] A /loja é do jogador. Para abrir a de alguém: nevermiss loja <jogador>");
+            else if (loja == null) sender.sendMessage("§cA /loja ainda não funciona neste servidor (Folia).");
+            else loja.abrir((Player) sender);
         } else if (sender instanceof Player) {
             laco.kit(sender.getName(), args, texto -> agenda.responder(sender, texto));
         } else {

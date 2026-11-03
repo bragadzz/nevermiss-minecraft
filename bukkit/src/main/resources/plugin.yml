@@ -20,10 +20,18 @@ commands:
     description: O /kit da NeverMiss, para o servidor que já tem outro /kit (EssentialsX).
     usage: /nmkit [nome do kit]
     permission: nevermiss.kit
+  loja:
+    description: Abre a loja do servidor (os produtos da NeverMiss) e paga com Pix.
+    usage: /loja
+    aliases: [shop, nmloja]
+    permission: nevermiss.loja
 permissions:
   nevermiss.admin:
     description: Usar /nevermiss.
     default: op
   nevermiss.kit:
     description: Usar /kit e /nmkit.
+    default: true
+  nevermiss.loja:
+    description: Usar /loja, /shop e /nmloja.
     default: true

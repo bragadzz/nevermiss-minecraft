@@ -3,6 +3,8 @@
 
 Uso: python3 -I teste/cliente.py <porta> <nick> < comandos
   Cada linha da entrada é um comando do jogador ("kit vip-diamante"). Na saída: CONECTADO, CHAT <texto> e SAIU <motivo>.
+  A /loja (contrato, 18): "@clicar <espaço>" clica no menu aberto. Na saída: JANELA <id> <título> e MAPA <id> <arquivo>, o
+  mapa inteiro (128 x 128, um byte de cor por pixel) gravado em <arquivo> (na pasta NM_MAPAS, ou na atual).
   O servidor precisa de network-compression-threshold=-1 (sem compressão) e online-mode=false.
 Os números dos pacotes são os de cada versão testada (1.7.10, 1.8.8, 1.12.2, 1.16.5, 1.20.4, 1.21.11 e 26.3); os do 1.21.11 e do 26.3
 saíram do relatório do próprio servidor da Mojang (java -DbundlerMainClass=net.minecraft.data.Main -jar server.jar --reports).
@@ -34,6 +36,16 @@ PLAY = {
     767: (0x26, 0x18, 0x6C, 0x04, 0x1D, None),
     774: (0x2B, 0x1B, 0x77, 0x06, 0x20, 0x2B),
     777: (0x2D, 0x1C, 0x7C, 0x07, 0x20, 0x2C),
+}
+# A /loja: (menu abriu, dados do mapa, transação recusada (até o 1.16) que chegam; clique, desculpa da transação que saem).
+# 1.21.11 e 26.3 do relatório da Mojang; os outros da tabela de pacotes de cada versão, conferida com os de cima
+MENU = {
+    47: (0x2D, 0x34, 0x32, 0x0E, 0x0F),
+    340: (0x13, 0x24, 0x11, 0x07, 0x05),
+    754: (0x2D, 0x25, 0x11, 0x09, 0x07),
+    765: (0x31, 0x2A, None, 0x0D, None),
+    774: (0x39, 0x31, None, 0x11, None),
+    777: (0x3C, 0x34, None, 0x12, None),
 }
 # configuração (1.20.2+): (terminou, keep-alive, ping, pacotes conhecidos, código de conduta, saída) que chegam,
 # e (terminou, keep-alive, pong, pacotes conhecidos, aceitar a conduta) que saem
@@ -125,8 +137,57 @@ def legivel(dados):
     return "".join(ch if ch.isprintable() else " " for ch in t).strip()
 
 
+def clique(proto, janela, espaco):
+    """O clique esquerdo (modo 0) no espaço do menu, sem item na mão. O servidor cancela (é a /loja) e manda o menu de novo."""
+    if proto >= 768:  # 1.21.2+: o id da janela em varint; 1.21.5+: o item no cursor é um HashedStack opcional (vazio = 0)
+        return varint(janela) + varint(0) + struct.pack(">hb", espaco, 0) + varint(0) + varint(0) + b"\0"
+    if proto >= 755:  # 1.17 a 1.21.1: o state id e a lista dos espaços mudados
+        return bytes([janela]) + varint(0) + struct.pack(">hb", espaco, 0) + varint(0) + varint(0) + b"\0"
+    item = b"\0" if proto >= 393 else struct.pack(">h", -1)
+    modo = bytes([0]) if proto == 47 else varint(0)
+    return bytes([janela]) + struct.pack(">hbh", espaco, 0, 1) + modo + item
+
+
+def mapa(proto, dados, mapas, pasta):
+    """Os pixels do Map Data no mapa guardado (128 x 128). None se o pacote não traz pixels."""
+    mid, i = varint_de(dados)
+    i += 1  # escala
+    if proto >= 340:
+        i += 1  # 1.12-1.16: o "mostrar a posição"; 1.17+: o "travado"
+    if 754 <= proto < 755:
+        i += 1  # 1.16: "travado" também
+    if proto >= 755:
+        tem = dados[i]
+        i += 1
+        n = 0
+        if tem:
+            n, i = varint_de(dados, i)
+        if n:
+            return None  # o mapa da /loja não tem marcador
+    else:
+        n, i = varint_de(dados, i)
+        if n:
+            return None
+    colunas = dados[i]
+    i += 1
+    if not colunas:
+        return None
+    linhas, x, z = dados[i], dados[i + 1], dados[i + 2]
+    i += 3
+    tam, i = varint_de(dados, i)
+    buf = mapas.setdefault(mid, bytearray(128 * 128))
+    for l in range(linhas):
+        buf[(z + l) * 128 + x:(z + l) * 128 + x + colunas] = dados[i + l * colunas:i + (l + 1) * colunas]
+    arquivo = "%s/mapa-%d.bin" % (pasta, mid)
+    with open(arquivo, "wb") as f:
+        f.write(bytes(buf))
+    return mid, arquivo
+
+
 def main():
     porta, nick = int(sys.argv[1]), sys.argv[2]
+    import os
+    pasta = os.environ.get("NM_MAPAS", ".")
     proto = protocolo(porta)
     if proto not in PLAY:
         print("SAIU protocolo %d não está na tabela do cliente" % proto, flush=True)
@@ -178,11 +239,21 @@ def main():
                 return 1
 
     print("CONECTADO %d" % proto, flush=True)
+    menu = MENU.get(proto)
+    janela = [None]
+    mapas = {}
 
     def comandos():
         for linha in sys.stdin:
             linha = linha.strip()
             if not linha:
+                continue
+            if linha.startswith("@clicar "):
+                if menu is None or janela[0] is None:
+                    print("SEMJANELA", flush=True)
+                    continue
+                c.mandar(menu[3], clique(proto, janela[0], int(linha.split()[1])))
+                print("CLICOU " + linha.split()[1], flush=True)
                 continue
             if proto >= 760:
                 dados = texto(linha)
@@ -205,6 +276,15 @@ def main():
                 c.mandar(ka_out, dados)
             elif pid == chat_in:
                 print("CHAT " + legivel(dados), flush=True)
+            elif menu and pid == menu[0]:
+                janela[0], i = (dados[0], 1) if proto < 477 else varint_de(dados)
+                print("JANELA %d %s" % (janela[0], legivel(dados[i:])), flush=True)
+            elif menu and pid == menu[1]:
+                m = mapa(proto, dados, mapas, pasta)
+                if m:
+                    print("MAPA %d %s" % m, flush=True)
+            elif menu and menu[2] is not None and pid == menu[2] and not dados[3]:
+                c.mandar(menu[4], dados[:3] + b"\1")
             elif pid == saida:
                 print("SAIU " + legivel(dados), flush=True)
                 return 1

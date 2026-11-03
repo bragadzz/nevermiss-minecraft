@@ -84,6 +84,17 @@ No painel, em **Minecraft › Kits**, você monta o inventário (itens, quantida
 - **Nunca dá 2 vezes:** o kit da compra segue o `executadas.txt`, como os comandos. A hora de cada `/kit` vai para o `resgates.txt` (na pasta do plugin) antes de dar os itens. Não apague esse arquivo: sem ele o intervalo zera.
 - Por dentro, o plugin dá cada item com o comando do próprio jogo (`give` e `item replace`, ou o `replaceitem` antes do 1.17; no Bukkit sempre como `minecraft:give`, para o `/give` de outro plugin não pegar; no Fabric e no Forge, direto no despachante de comandos do jogo). No 1.7.10 e no 1.8, pela API do Bukkit.
 
+## Loja no jogo (/loja)
+
+O jogador compra **dentro do servidor** o que você vende pela NeverMiss. Ele digita `/loja` (ou `/shop`, ou `/nmloja`) e abre um menu de baú com os produtos que você criou no painel para **este** servidor; escolhe a opção e a quantidade e toca em **Pagar com Pix**. O QR Code do Pix aparece num **mapa na mão** dele: é só ler com o app do banco. Pago, o mapa some, ele recebe `Pagamento aprovado!` e a entrega chega como as outras (pela fila, com os comandos e o kit do produto).
+
+- **O que aparece:** a variação com **Entrega no Minecraft** neste servidor e **Pedir o nick** ligado. Fica fora (vende só no Discord e no site) a que manda código na DM, a entrega pela equipe e a que dá cargo do Discord. No painel, em **Entrega no Minecraft › Mais opções › Na /loja do jogo**: **Mostrar na /loja** e o **ícone** do menu (sem escolher, o 1º item do kit, ou um baú).
+- **Pagamento:** o Pix sai pela chave YuvexPay que o seu bot já usa, com o mesmo estoque e o mesmo preço (com o desconto por quantidade). Não precisa da loja web publicada. O pedido aparece em **Site › Pedidos** como `Minecraft · <nick>`. Sem cupom.
+- **Vence em 15 min.** O plugin confere o pagamento a cada 5 s; vencido, o mapa sai. No 1.15 em diante o chat tem também o **copia e cola** num clique. No máximo 2 Pix abertos por jogador.
+- **Jogador Bedrock (Geyser):** compra no gamertag dele; o produto que não entrega para Bedrock aparece como "Só para o Minecraft Java".
+- **NPC ou menu de outro plugin:** `nevermiss loja <jogador>` no console abre a /loja daquele jogador.
+- **Onde:** Spigot e Paper. O Folia, o Fabric, o Forge, o NeoForge, o PowerNukkitX e os proxies ainda não têm a /loja.
+
 ## Comandos
 
 Permissão `nevermiss.admin` (vem para op; no proxy, dê pelo plugin de permissão do proxy; no Fabric, no Forge e no NeoForge, quem pode o `/op`). O console sempre pode.
@@ -95,6 +106,8 @@ Permissão `nevermiss.admin` (vem para op; no proxy, dê pelo plugin de permiss�
 | `nevermiss recarregar` | Relê o `config.yml` |
 | `nevermiss chave <chave>` | Grava a chave (só no console) |
 | `kit [nome]` e `nmkit [nome]` | Do jogador, permissão `nevermiss.kit`: lista ou pega os kits da NeverMiss dele (acima) |
+| `loja`, `shop` e `nmloja` | Do jogador, permissão `nevermiss.loja` (todos têm): abre a loja do servidor (acima). Spigot e Paper |
+| `nevermiss loja <jogador>` | Abre a /loja de um jogador (para NPC e menu de outro plugin) |
 
 O botão **Testar** do painel manda uma entrega de teste: o console mostra `Teste do painel recebido` e nenhum comando roda.
 

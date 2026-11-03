@@ -61,4 +61,17 @@ class Bedrock {
         Future<?> f = (Future<?>) uuidPara.invoke(api, gamertag);
         return (UUID) f.get(10, TimeUnit.SECONDS);
     }
+
+    /** O gamertag do jogador online que entrou pelo Geyser (a /loja compra no nome dele). null = jogador Java. */
+    String gamertag(UUID jogador) {
+        if (api == null) return null;
+        try {
+            // Pela interface: a classe que implementa pode não ser pública
+            ClassLoader l = api.getClass().getClassLoader();
+            Object p = Class.forName("org.geysermc.floodgate.api.FloodgateApi", false, l).getMethod("getPlayer", UUID.class).invoke(api, jogador);
+            return p == null ? null : String.valueOf(Class.forName("org.geysermc.floodgate.api.player.FloodgatePlayer", false, l).getMethod("getUsername").invoke(p));
+        } catch (ReflectiveOperationException | RuntimeException e) {
+            return null;
+        }
+    }
 }
