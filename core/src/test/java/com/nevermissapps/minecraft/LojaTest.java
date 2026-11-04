@@ -12,6 +12,7 @@ import java.util.Arrays;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertNotSame;
 import static org.junit.Assert.assertSame;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
@@ -85,6 +86,36 @@ public class LojaTest {
         assertEquals("pago", pago.status);
         assertEquals(java.util.Arrays.asList("Seu VIP Ouro foi ativado.", "Use /vip para ver os comandos."), pago.mensagem);
         assertEquals(0, pago.tamanho);
+    }
+
+    @Test
+    public void compraDiretaPeloId() throws Exception {
+        assertTrue(loja.ids().isEmpty());
+        Loja.Catalogo c = loja.catalogo();
+        assertEquals(Arrays.asList("vip-30", "chave-rara", "chave-lendaria"), loja.ids());
+        // O id da variação (o ?variacao= do painel): o produto dela, só com ela
+        Loja.Produto pr = Loja.escolher(c, "chave-rara");
+        assertEquals("chaves", pr.id);
+        assertEquals(1, pr.variacoes.size());
+        assertEquals("chave-rara", pr.variacoes.get(0).id);
+        // O id do produto vale quando ele tem uma variação só; com mais, a recusa diz quais
+        assertEquals("vip-30", Loja.escolher(c, "vip").variacoes.get(0).id);
+        try {
+            Loja.escolher(c, "chaves");
+            fail();
+        } catch (Loja.Erro e) {
+            assertEquals("Chaves tem 2 variações. Use o id de uma: chave-rara, chave-lendaria.", e.getMessage());
+        }
+        try {
+            Loja.escolher(c, "nao-existe");
+            fail();
+        } catch (Loja.Erro e) {
+            assertEquals("O produto nao-existe não está à venda neste servidor.", e.getMessage());
+        }
+        // Depois da compra o catálogo é lido de novo, e o tab continua com os ids
+        loja.comprar(pr, pr.variacoes.get(0), 1, "Steve", false, "chave-de-teste-2", null);
+        assertEquals(3, loja.ids().size());
+        assertNotSame(c, loja.catalogo());
     }
 
     @Test

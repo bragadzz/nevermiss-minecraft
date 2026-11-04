@@ -40,6 +40,7 @@ import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.function.Consumer;
 
 /**
  * O /loja no Spigot e no Paper (contrato, seção 18): um menu de baú com os produtos que o lojista criou no painel para este
@@ -232,14 +233,49 @@ final class LojaMenu implements Listener {
                     : Arrays.asList("§7O QR Code aparece num mapa", "§7na sua mão. Vence em 15 min.");
             por(t, 22, item(Kit.icone("emerald", "EMERALD"), 1, rotulo, como), () -> {
                 p.closeInventory();
-                pagar(p, pr, v, qtd);
+                pagar(p, pr, v, qtd, texto -> { });
             });
         }
         por(t, 26, botao("barrier", "BARRIER", "§cCancelar"), p::closeInventory);
         p.openInventory(t.inv);
     }
 
-    private void pagar(Player p, Loja.Produto pr, Loja.Variacao v, int qtd) {
+    /**
+     * nevermiss comprar <jogador> <id>: o Pix de um produto direto, sem a vitrine (o "Pagar" do menu de outro plugin, pelo
+     * console). O mesmo caminho do Pagar da confirmação, na quantidade mínima. responder: quem mandou o comando.
+     */
+    void comprar(Player p, String id, Consumer<String> responder) {
+        assincrono(() -> {
+            Loja.Produto pr;
+            try {
+                Loja.Catalogo c = loja.catalogo();
+                if (!c.aberta) throw new Loja.Erro(c.motivo != null ? c.motivo : "A loja está fechada agora.");
+                pr = Loja.escolher(c, id);
+            } catch (Loja.Erro e) {
+                principal(() -> recusar(p, responder, e.getMessage()));
+                return;
+            }
+            principal(() -> {
+                Loja.Variacao v = pr.variacoes.get(0);
+                if (!p.isOnline()) responder.accept("[Loja] " + p.getName() + " saiu antes do Pix.");
+                else if (v.esgotado) recusar(p, responder, v.nome + " está esgotado.");
+                else if (gamertag(p) != null && !v.bedrock) recusar(p, responder, v.nome + " é só para o Minecraft Java.");
+                else {
+                    responder.accept("[Loja] " + (v.gratis ? "Resgatando " : "Gerando o Pix de ") + v.nome + " para " + p.getName() + ".");
+                    p.closeInventory();
+                    pagar(p, pr, v, v.min, responder);
+                }
+            });
+        });
+    }
+
+    private static void recusar(Player p, Consumer<String> responder, String msg) {
+        responder.accept("[Loja] " + msg);
+        if (p.isOnline()) avisar(p, "§c" + msg);
+    }
+
+    /** eco: quem mandou o nevermiss comprar também lê a recusa da API (os 2 Pix abertos, o estoque). */
+    private void pagar(Player p, Loja.Produto pr, Loja.Variacao v, int qtd, Consumer<String> eco) {
         if (!v.gratis && p.getInventory().firstEmpty() < 0) {
             avisar(p, "§cLibere um espaço no inventário para receber o mapa do Pix.");
             return;
@@ -261,7 +297,7 @@ final class LojaMenu implements Listener {
                 ped = comprar(pr, v, qtd, nick, gamertag != null, chave, ip);
             } catch (Loja.Erro e) {
                 gerando.remove(p.getUniqueId());
-                principal(() -> avisar(p, "§c" + e.getMessage()));
+                principal(() -> recusar(p, eco, e.getMessage()));
                 return;
             }
             principal(() -> {

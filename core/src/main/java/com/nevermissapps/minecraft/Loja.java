@@ -281,9 +281,35 @@ final class Loja {
         corpo.add("chave", new JsonPrimitive(chave));
         if (ip != null) corpo.addProperty("ip", ip);
         corpo.addProperty("totalVisto", v.total(qtd));
-        // O estoque mudou: o próximo /loja lê de novo
-        guardado = null;
+        // O estoque mudou: o próximo /loja lê de novo (o guardado fica para o tab do nevermiss comprar)
+        guardadoEm = 0;
         return pedido(pedir("/v1/minecraft/loja/pedidos", corpo));
+    }
+
+    /**
+     * nevermiss comprar: o produto só com a variação do id. O id é o da variação (o "?variacao=" do endereço do painel); o do
+     * produto (o "/loja/produtos/<id>") vale quando ele tem uma variação só. O painel não repete id entre os dois.
+     */
+    static Produto escolher(Catalogo c, String id) throws Erro {
+        for (Produto p : c.produtos) {
+            for (Variacao v : p.variacoes) if (v.id.equals(id)) return new Produto(p.id, p.nome, p.descricao, p.icone, Collections.singletonList(v));
+        }
+        for (Produto p : c.produtos) {
+            if (!p.id.equals(id)) continue;
+            if (p.variacoes.size() == 1) return p;
+            List<String> ids = new ArrayList<>();
+            for (Variacao v : p.variacoes) ids.add(v.id);
+            throw new Erro(p.nome + " tem " + ids.size() + " variações. Use o id de uma: " + String.join(", ", ids) + ".");
+        }
+        throw new Erro("O produto " + limpo(id, 40, "?") + " não está à venda neste servidor.");
+    }
+
+    /** Os ids das variações do último catálogo lido, sem consultar a API (o tab do nevermiss comprar). */
+    List<String> ids() {
+        List<String> s = new ArrayList<>();
+        Catalogo c = guardado;
+        if (c != null) for (Produto p : c.produtos) for (Variacao v : p.variacoes) s.add(v.id);
+        return s;
     }
 
     Pedido status(String numero) throws Erro {
