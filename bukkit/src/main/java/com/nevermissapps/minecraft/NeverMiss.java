@@ -17,9 +17,11 @@ import org.bukkit.plugin.java.JavaPlugin;
 
 import java.io.IOException;
 import java.lang.reflect.Method;
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collection;
 import java.util.Collections;
+import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
@@ -100,7 +102,14 @@ public final class NeverMiss extends JavaPlugin implements Listener, Jogo {
 
     @Override
     public boolean onCommand(CommandSender sender, Command command, String label, String[] args) {
-        if (command.getName().equalsIgnoreCase("nevermiss") && args.length == 2 && args[0].equalsIgnoreCase("loja")) {
+        if (command.getName().equalsIgnoreCase("nevermiss") && args.length > 0 && args[0].equalsIgnoreCase("comprar")) {
+            // O Pix de um produto direto, para o "Pagar" do menu de outro plugin (pelo console). O nevermiss.admin vem do plugin.yml
+            Player p = args.length == 3 ? Bukkit.getPlayerExact(args[1]) : null;
+            if (args.length != 3) sender.sendMessage("[Loja] Use: nevermiss comprar <jogador> <id do produto>");
+            else if (loja == null) sender.sendMessage("[Loja] A /loja ainda não funciona no Folia.");
+            else if (p == null) sender.sendMessage("[Loja] " + args[1] + " não está online.");
+            else loja.comprar(p, args[2], texto -> agenda.responder(sender, texto));
+        } else if (command.getName().equalsIgnoreCase("nevermiss") && args.length == 2 && args[0].equalsIgnoreCase("loja")) {
             // Para o NPC ou o menu de outro plugin abrir a /loja de um jogador (pelo console)
             Player p = Bukkit.getPlayerExact(args[1]);
             if (loja == null) sender.sendMessage("[NeverMiss] A /loja ainda não funciona no Folia.");
@@ -119,6 +128,15 @@ public final class NeverMiss extends JavaPlugin implements Listener, Jogo {
             sender.sendMessage("[NeverMiss] O /" + label + " é do jogador.");
         }
         return true;
+    }
+
+    @Override
+    public List<String> onTabComplete(CommandSender sender, Command command, String alias, String[] args) {
+        // nevermiss comprar <jogador> <id>: o jogador pelo tab de sempre (null) e os ids do catálogo já lido, sem consultar a API
+        if (!command.getName().equalsIgnoreCase("nevermiss") || args.length != 3 || !args[0].equalsIgnoreCase("comprar")) return null;
+        List<String> ids = new ArrayList<>();
+        if (sender.hasPermission("nevermiss.admin")) for (String id : laco.loja.ids()) if (id.startsWith(args[2])) ids.add(id);
+        return ids;
     }
 
     // --- Jogo ---
